@@ -38,6 +38,9 @@ dependencies:
   shared_preferences: ^2.5.4
   intl: ^0.20.2
   google_fonts: ^8.0.1
+  image_picker: ^1.0.7 # <-- TAMBAHKAN INI
+  path_provider: ^2.1.2 # <-- TAMBAHKAN INI
+  fl_chart: ^0.66.2 # <-- TAMBAHKAN INI
 
 dev_dependencies:
   flutter_test:
@@ -55,11 +58,12 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
-
-  # The following line ensures that the Material Icons font is
-  # included with your application, so that you can use the icons in
-  # the material Icons class.
   uses-material-design: true
+
+  # Untuk menambahkan aset ke aplikasi Anda, tambahkan entri di sini.
+  # Aset dapat ditentukan masing-masing file, atau dengan folder.
+  assets:
+    - assets/coffee_logo.png # <-- INDENTASI: 2 spasi dari 'assets:'
 
   # To add assets to your application, add an assets section, like this:
   # assets:

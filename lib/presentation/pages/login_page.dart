@@ -1,7 +1,12 @@
+// lib/presentation/pages/login_page.dart
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:kopitiam_app/core/app_colors.dart';
 import 'package:kopitiam_app/data/datasources/auth_remote_datasource.dart';
-import 'package:kopitiam_app/presentation/pages/home_page.dart';
+import 'package:kopitiam_app/presentation/pages/initial_wrapper_page.dart';
+import 'package:kopitiam_app/presentation/pages/register_page.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -11,62 +16,17 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  // Controller untuk mengambil teks inputan
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
-  // Status loading (biar tombol muter saat diklik)
   bool _isLoading = false;
+  bool _rememberMe = false;
+  bool _isPasswordVisible = false;
 
-  // Fungsi Login
-  void _handleLogin() async {
-    // 1. Validasi Input Kosong
-    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Email dan Password harus diisi!"),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    // 2. Panggil API Login
-    final authService = AuthRemoteDatasource();
-    bool success = await authService.login(
-      _emailController.text,
-      _passwordController.text,
-    );
-
-    setState(() {
-      _isLoading = false;
-    });
-
-    if (success) {
-      // 3. Jika Sukses -> Pindah ke Home
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const HomePage()),
-      );
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Login Berhasil!")),
-      );
-    } else {
-      // 4. Jika Gagal -> Munculkan Pesan Error
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Login Gagal. Cek email/password Anda."),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
+  @override
+  void initState() {
+    super.initState();
+    _loadRememberMeEmail();
   }
 
   @override
@@ -76,146 +36,296 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+  // =========================
+  // LOAD REMEMBER ME DATA
+  // =========================
+  Future<void> _loadRememberMeEmail() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedEmail = prefs.getString('remember_email');
+    final savedRemember = prefs.getBool('remember_me') ?? false;
+
+    if (savedEmail != null && savedRemember) {
+      _emailController.text = savedEmail;
+      if (!mounted) return;
+      setState(() {
+        _rememberMe = true;
+      });
+    }
+  }
+
+  // =========================
+  // HANDLE LOGIN
+  // =========================
+  Future<void> _handleLogin() async {
+    if (_emailController.text.isEmpty ||
+        _passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Email dan Password harus diisi!"),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    final authService = AuthRemoteDatasource();
+    final success = await authService.login(
+      _emailController.text.trim(),
+      _passwordController.text.trim(),
+    );
+
+    if (!mounted) return;
+
+    setState(() => _isLoading = false);
+
+    if (success) {
+      final prefs = await SharedPreferences.getInstance();
+
+      if (_rememberMe) {
+        await prefs.setString(
+            'remember_email', _emailController.text.trim());
+        await prefs.setBool('remember_me', true);
+      } else {
+        await prefs.remove('remember_email');
+        await prefs.setBool('remember_me', false);
+      }
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+            builder: (_) => const InitialWrapperPage()),
+      );
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Login Berhasil!")),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+              Text("Login Gagal. Cek email/password Anda."),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // =========================
+  // BUILD UI
+  // =========================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: AppColors.primaryGreen,
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // LOGO
-                const Icon(
-                  Icons.coffee_rounded,
-                  size: 80,
-                  color: Color(0xFF6F4E37),
-                ),
-                const SizedBox(height: 16),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(
+              horizontal: 24, vertical: 40),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back_ios,
+                    color: AppColors.white),
+                onPressed: () => Navigator.pop(context),
+              ),
+              const SizedBox(height: 30),
 
-                // JUDUL
-                Text(
-                  "Kopitiam33",
-                  style: GoogleFonts.poppins(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF4A3B32),
+              Text(
+                "Welcome Back!",
+                style: GoogleFonts.poppins(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.white,
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              Text(
+                "Silahkan masuk untuk melanjutkan.",
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  color:
+                      AppColors.lightCream.withOpacity(0.8),
+                ),
+              ),
+              const SizedBox(height: 40),
+
+              _buildInputField(
+                controller: _emailController,
+                hintText: "Masukkan Email",
+                icon: Icons.email_outlined,
+                keyboardType:
+                    TextInputType.emailAddress,
+              ),
+              const SizedBox(height: 20),
+
+              _buildInputField(
+                controller: _passwordController,
+                hintText: "Masukkan Password",
+                icon: Icons.lock_outline,
+                isPassword: true,
+                isPasswordVisible:
+                    _isPasswordVisible,
+                toggleVisibility: () {
+                  setState(() {
+                    _isPasswordVisible =
+                        !_isPasswordVisible;
+                  });
+                },
+              ),
+              const SizedBox(height: 15),
+
+              Row(
+                mainAxisAlignment:
+                    MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: _rememberMe,
+                        onChanged: (value) {
+                          setState(() {
+                            _rememberMe =
+                                value ?? false;
+                          });
+                        },
+                        activeColor:
+                            AppColors.lightCream,
+                        checkColor:
+                            AppColors.darkGreen,
+                        materialTapTargetSize:
+                            MaterialTapTargetSize
+                                .shrinkWrap,
+                      ),
+                      Text(
+                        "Ingat Saya",
+                        style: GoogleFonts.poppins(
+                            color:
+                                AppColors.white),
+                      ),
+                    ],
                   ),
-                ),
-                Text(
-                  "Nikmati Kopi Terbaik Harimu",
-                  style: GoogleFonts.poppins(
-                    fontSize: 14,
-                    color: Colors.grey[600],
-                  ),
-                ),
-                const SizedBox(height: 40),
-
-                // INPUT EMAIL
-                _buildInputField(
-                  controller: _emailController,
-                  label: "Email Address",
-                  icon: Icons.email_outlined,
-                ),
-                const SizedBox(height: 16),
-
-                // INPUT PASSWORD
-                _buildInputField(
-                  controller: _passwordController,
-                  label: "Password",
-                  icon: Icons.lock_outline,
-                  isPassword: true,
-                ),
-                const SizedBox(height: 10),
-
-                // LUPA PASSWORD
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () {},
+                  TextButton(
+                    onPressed: () {
+                      ScaffoldMessenger.of(context)
+                          .showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                              "Fitur Lupa Password belum diimplementasi."),
+                        ),
+                      );
+                    },
                     child: Text(
                       "Lupa Password?",
                       style: GoogleFonts.poppins(
-                        color: const Color(0xFF6F4E37),
-                      ),
+                          color:
+                              AppColors.white),
                     ),
                   ),
-                ),
-                const SizedBox(height: 20),
+                ],
+              ),
+              const SizedBox(height: 40),
 
-                // TOMBOL LOGIN
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _handleLogin,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF6F4E37),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 5,
+              SizedBox(
+                width: double.infinity,
+                height: 55,
+                child: ElevatedButton(
+                  onPressed:
+                      _isLoading ? null : _handleLogin,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor:
+                        AppColors.lightCream,
+                    foregroundColor:
+                        AppColors.darkGreen,
+                    shape: RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(30),
                     ),
-                    child: _isLoading
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : Text(
-                            "Masuk Sekarang",
-                            style: GoogleFonts.poppins(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
+                  ),
+                  child: _isLoading
+                      ? const CircularProgressIndicator(
+                          color:
+                              AppColors.darkGreen)
+                      : Text(
+                          "Masuk",
+                          style:
+                              GoogleFonts.poppins(
+                            fontSize: 18,
+                            fontWeight:
+                                FontWeight.w600,
                           ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // DAFTAR
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      "Belum punya akun? ",
-                      style: GoogleFonts.poppins(color: Colors.grey[600]),
-                    ),
-                    GestureDetector(
-                      onTap: () {
-                        print("Ke halaman daftar");
-                      },
-                      child: Text(
-                        "Daftar",
-                        style: GoogleFonts.poppins(
-                          color: const Color(0xFF6F4E37),
-                          fontWeight: FontWeight.bold,
                         ),
+                ),
+              ),
+              const SizedBox(height: 30),
+
+              Row(
+                mainAxisAlignment:
+                    MainAxisAlignment.center,
+                children: [
+                  Text(
+                    "Belum punya akun? ",
+                    style: GoogleFonts.poppins(
+                        color: AppColors.white),
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              const RegisterPage(),
+                        ),
+                      );
+                    },
+                    child: Text(
+                      "Daftar",
+                      style: GoogleFonts.poppins(
+                        color: AppColors.white,
+                        fontWeight:
+                            FontWeight.bold,
+                        decoration:
+                            TextDecoration
+                                .underline,
+                        decorationColor:
+                            AppColors.white,
                       ),
                     ),
-                  ],
-                ),
-              ],
-            ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  // WIDGET INPUT FIELD
+  // =========================
+  // INPUT FIELD WIDGET
+  // =========================
   Widget _buildInputField({
     required TextEditingController controller,
-    required String label,
+    required String hintText,
     required IconData icon,
+    TextInputType keyboardType =
+        TextInputType.text,
     bool isPassword = false,
+    bool isPasswordVisible = false,
+    VoidCallback? toggleVisibility,
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        color: AppColors.lightCream,
+        borderRadius:
+            BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color:
+                Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 5),
           ),
@@ -223,14 +333,40 @@ class _LoginPageState extends State<LoginPage> {
       ),
       child: TextField(
         controller: controller,
-        obscureText: isPassword,
+        keyboardType: keyboardType,
+        obscureText:
+            isPassword && !isPasswordVisible,
+        style: GoogleFonts.poppins(
+            color: AppColors.darkBrown),
         decoration: InputDecoration(
-          prefixIcon: Icon(icon, color: Colors.grey[400]),
-          hintText: label,
-          hintStyle: GoogleFonts.poppins(color: Colors.grey[400]),
+          prefixIcon:
+              Icon(icon,
+                  color:
+                      AppColors.primaryGreen),
+          hintText: hintText,
+          hintStyle:
+              GoogleFonts.poppins(
+            color: AppColors.primaryGreen
+                .withOpacity(0.7),
+          ),
           border: InputBorder.none,
           contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14),
+          suffixIcon: isPassword
+              ? IconButton(
+                  icon: Icon(
+                    isPasswordVisible
+                        ? Icons.visibility
+                        : Icons.visibility_off,
+                    color: AppColors
+                        .primaryGreen,
+                  ),
+                  onPressed:
+                      toggleVisibility,
+                )
+              : null,
         ),
       ),
     );
