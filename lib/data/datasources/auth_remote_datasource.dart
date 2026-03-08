@@ -7,8 +7,11 @@ import 'package:kopitiam_app/data/models/user_model.dart';
 class AuthRemoteDatasource {
   final Dio _dio = Dio();
 
-  // Fungsi Register
-  Future<bool> register(String name, String email, String password, String phone) async {
+  // ===============================
+  // Register
+  // ===============================
+  Future<bool> register(
+      String name, String email, String password, String phone) async {
     try {
       final response = await _dio.post(
         ApiConstants.register,
@@ -18,17 +21,18 @@ class AuthRemoteDatasource {
           'password': password,
           'phone': phone,
         },
-        options: Options(
-          headers: {'Accept': 'application/json'},
-        ),
+        options: Options(headers: {'Accept': 'application/json'}),
       );
 
       if (response.statusCode == 201) {
         final token = response.data['access_token'];
+
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('auth_token', token);
+
         return true;
       }
+
       return false;
     } on DioException catch (e) {
       print("Register Gagal: ${e.response?.data}");
@@ -36,7 +40,9 @@ class AuthRemoteDatasource {
     }
   }
 
-  // Fungsi Login
+  // ===============================
+  // Login
+  // ===============================
   Future<bool> login(String email, String password) async {
     try {
       final response = await _dio.post(
@@ -45,9 +51,7 @@ class AuthRemoteDatasource {
           'email': email,
           'password': password,
         },
-        options: Options(
-          headers: {'Accept': 'application/json'},
-        ),
+        options: Options(headers: {'Accept': 'application/json'}),
       );
 
       if (response.statusCode == 200) {
@@ -57,7 +61,7 @@ class AuthRemoteDatasource {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('auth_token', token);
 
-        // Simpan user sebagai JSON string yang valid
+        // Simpan user dalam bentuk JSON string
         await prefs.setString('user_info', jsonEncode(userJson));
 
         return true;
@@ -70,26 +74,32 @@ class AuthRemoteDatasource {
     }
   }
 
-  // Cek apakah user sudah login
+  // ===============================
+  // Cek Login
+  // ===============================
   Future<bool> isLogin() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token');
     return token != null;
   }
 
+  // ===============================
   // Logout
+  // ===============================
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('auth_token');
     await prefs.remove('user_info');
   }
 
-  // Fungsi untuk mendapatkan informasi user yang login
+  // ===============================
+  // Ambil User Info
+  // ===============================
   Future<User?> getUserInfo() async {
     final prefs = await SharedPreferences.getInstance();
     final userJsonString = prefs.getString('user_info');
 
-    // Jika ada di local, ambil dari SharedPreferences
+    // Jika ada di local
     if (userJsonString != null) {
       final Map<String, dynamic> userMap = jsonDecode(userJsonString);
       return User.fromJson(userMap);
@@ -118,5 +128,91 @@ class AuthRemoteDatasource {
     }
 
     return null;
+  }
+
+  // ===============================
+  // Update Profil
+  // ===============================
+  Future<bool> updateProfile(String name, String email, String phone) async {
+    try {
+      final options = await _getAuthOptions();
+      if (options.headers?['Authorization'] == 'Bearer null') return false;
+
+      final response = await _dio.post(
+        '${ApiConstants.baseUrl}/user/profile',
+        data: {
+          'name': name,
+          'email': email,
+          'phone': phone,
+        },
+        options: options,
+      );
+
+      if (response.statusCode == 200) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(
+          'user_info',
+          jsonEncode(response.data['data']),
+        );
+
+        return true;
+      }
+
+      return false;
+    } on DioException catch (e) {
+      print("Update Profil Gagal: ${e.response?.data}");
+      return false;
+    }
+  }
+
+  // ===============================
+  // Change Password
+  // ===============================
+  Future<bool> changePassword(
+      String currentPassword, String newPassword, String confirmPassword) async {
+    try {
+      final options = await _getAuthOptions();
+      if (options.headers?['Authorization'] == 'Bearer null') return false;
+
+      final response = await _dio.post(
+        '${ApiConstants.baseUrl}/user/change-password',
+        data: {
+          'current_password': currentPassword,
+          'new_password': newPassword,
+          'new_password_confirmation': confirmPassword,
+        },
+        options: options,
+      );
+
+      if (response.statusCode == 200) {
+        final prefs = await SharedPreferences.getInstance();
+
+        // Setelah ubah password user harus login ulang
+        await prefs.remove('auth_token');
+        await prefs.remove('user_info');
+
+        return true;
+      }
+
+      return false;
+    } on DioException catch (e) {
+      print("Ubah Password Gagal: ${e.response?.data}");
+      return false;
+    }
+  }
+
+  // ===============================
+  // Helper: Ambil Authorization Token
+  // ===============================
+  Future<Options> _getAuthOptions() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('auth_token');
+
+    return Options(
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
   }
 }

@@ -11,8 +11,16 @@ class DailySales {
 
   factory DailySales.fromJson(Map<String, dynamic> json) {
     return DailySales(
-      date: DateTime.parse(json['date']),
-      totalSales: double.parse(json['total_sales'].toString()),
+      date: DateTime.tryParse(json['date'] ?? '') ?? DateTime.now(),
+      totalSales:
+          double.tryParse(json['total_sales']?.toString() ?? '0') ?? 0.0,
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'date': date.toIso8601String(),
+      'total_sales': totalSales,
+    };
   }
 }

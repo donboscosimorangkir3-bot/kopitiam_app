@@ -9,6 +9,8 @@ import 'package:kopitiam_app/data/datasources/order_remote_datasource.dart';
 import 'package:kopitiam_app/data/models/order_model.dart';
 import 'package:kopitiam_app/data/models/user_model.dart';
 import 'package:kopitiam_app/presentation/pages/login_page.dart';
+import 'package:kopitiam_app/core/api_constants.dart';
+
 
 class CashierDashboardPage extends StatefulWidget {
   final User user;
@@ -367,25 +369,23 @@ class _CashierDashboardPageState extends State<CashierDashboardPage> {
 
                       /// IMAGE
                       ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: Image.network(
-                          item.product?.imageUrl ??
-                              "https://via.placeholder.com/50",
-                          width: 40,
-                          height: 40,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) {
-                            return Container(
-                              width: 40,
-                              height: 40,
-                              color: Colors.grey.shade300,
-                              child: const Icon(Icons.image_not_supported),
-                            );
-                          },
+                          borderRadius: BorderRadius.circular(4),
+                          child: Image.network(
+                            // <-- Perubahan di sini -->
+                            item.product?.imageUrl != null && item.product!.imageUrl!.startsWith('http')
+                                ? item.product!.imageUrl!
+                                : (item.product?.imageUrl != null && item.product!.imageUrl!.isNotEmpty
+                                    ? '${ApiConstants.baseUrl}${item.product!.imageUrl!}'
+                                    : 'https://via.placeholder.com/50'),
+                            // <-- Akhir perubahan di sini -->
+                            width: 40,
+                            height: 40,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return const Icon(Icons.coffee, size: 24, color: AppColors.greyText);
+                            },
+                          ),
                         ),
-                      ),
-
-                      const SizedBox(width: 10),
 
                       /// NAME
                       Expanded(

@@ -41,6 +41,7 @@ dependencies:
   image_picker: ^1.0.7 # <-- TAMBAHKAN INI
   path_provider: ^2.1.2 # <-- TAMBAHKAN INI
   fl_chart: ^0.66.2 # <-- TAMBAHKAN INI
+  permission_handler: ^11.3.0 # <-- TAMBAHKAN INI
 
 dev_dependencies:
   flutter_test:

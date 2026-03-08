@@ -3,9 +3,9 @@
 import 'package:dio/dio.dart';
 import 'package:kopitiam_app/core/api_constants.dart';
 import 'package:kopitiam_app/data/models/report_summary_model.dart';
-import 'package:kopitiam_app/data/models/order_model.dart'; // Untuk laporan detail
+import 'package:kopitiam_app/data/models/order_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:intl/intl.dart'; // Untuk format tanggal kirim ke API
+import 'package:intl/intl.dart';
 
 class ReportRemoteDatasource {
   final Dio _dio = Dio();
@@ -84,15 +84,22 @@ class ReportRemoteDatasource {
     }
   }
 
-  // GET EKSPOR LAPORAN (hanya akan mengembalikan pesan sukses dari backend)
-  Future<String> exportSales({DateTime? startDate, DateTime? endDate}) async {
+  // FUNGSI BARU: EKSPOR LAPORAN (mengembalikan Response untuk di-download file)
+  Future<Response?> exportSalesFile({DateTime? startDate, DateTime? endDate}) async {
     try {
       final options = await _getAuthOptions();
-      if (options.headers?['Authorization'] == 'Bearer null') return "Login diperlukan untuk ekspor laporan.";
+      if (options.headers?['Authorization'] == 'Bearer null') {
+        print("Login diperlukan untuk ekspor laporan.");
+        return null;
+      }
 
       final Map<String, dynamic> queryParams = {};
       if (startDate != null) queryParams['start_date'] = DateFormat('yyyy-MM-dd').format(startDate);
       if (endDate != null) queryParams['end_date'] = DateFormat('yyyy-MM-dd').format(endDate);
+
+      // Set Accept header untuk menerima file Excel
+      options.headers?['Accept'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      options.responseType = ResponseType.bytes; // Terima respons sebagai bytes
 
       final response = await _dio.get(
         ApiConstants.baseUrl + '/admin/reports/export',
@@ -100,16 +107,17 @@ class ReportRemoteDatasource {
         options: options,
       );
 
+      // Backend harus mengembalikan file, jadi statusCode 200 adalah sukses
       if (response.statusCode == 200) {
-        return response.data['message'] ?? "Ekspor laporan berhasil diproses.";
+        return response; // Mengembalikan objek Response lengkap
       }
-      return response.data['message'] ?? "Gagal mengekspor laporan.";
+      return null;
     } on DioException catch (e) {
-      print("Error exporting sales report: ${e.response?.data}");
-      return e.response?.data['message'] ?? "Terjadi kesalahan saat mengekspor laporan.";
+      print("Error exporting sales report: ${e.response?.data ?? e.message}");
+      return e.response; // Mengembalikan response jika ada error
     } catch (e) {
       print("Unexpected error when exporting sales report: $e");
-      return "Terjadi kesalahan tak terduga saat mengekspor laporan.";
+      return null;
     }
   }
 }

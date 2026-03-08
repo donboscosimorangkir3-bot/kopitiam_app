@@ -1,12 +1,18 @@
 // lib/presentation/pages/sales_report_page.dart
 
+import 'dart:io'; // <-- IMPORT INI untuk File
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:kopitiam_app/core/app_colors.dart';
-import 'package:kopitiam_app/data/datasources/order_remote_datasource.dart'; // Order Datasource
-import 'package:kopitiam_app/data/models/order_model.dart'; // Order Model
-import 'package:kopitiam_app/data/datasources/report_remote_datasource.dart'; // Report Datasource
+import 'package:kopitiam_app/data/datasources/order_remote_datasource.dart';
+import 'package:kopitiam_app/data/models/order_model.dart';
+import 'package:kopitiam_app/data/datasources/report_remote_datasource.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:dio/dio.dart'; 
+import 'package:kopitiam_app/core/api_constants.dart'; 
+
 
 class SalesReportPage extends StatefulWidget {
   const SalesReportPage({super.key});
@@ -80,22 +86,78 @@ class _SalesReportPageState extends State<SalesReportPage> {
     }
   }
 
+  // FUNGSI BARU: EKSPOR LAPORAN KE FILE EXCEL
   Future<void> _exportReport() async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Mengekspor laporan..."), backgroundColor: AppColors.primaryGreen),
-    );
-    final message = await ReportRemoteDatasource().exportSales(
-      startDate: _selectedStartDate,
-      endDate: _selectedEndDate,
-    );
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: message.contains('berhasil') ? AppColors.primaryGreen : Colors.red,
-      ),
+      SnackBar(content: Text("Mengekspor laporan Excel untuk ${DateFormat('dd MMM').format(_selectedStartDate)} - ${DateFormat('dd MMM').format(_selectedEndDate)}..."),
+      backgroundColor: AppColors.primaryGreen),
     );
+
+    // 1. Cek dan minta izin penyimpanan
+    var status = await Permission.storage.request();
+    if (!status.isGranted) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Izin penyimpanan ditolak. Tidak dapat mengekspor laporan."), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    try {
+      final ReportRemoteDatasource reportService = ReportRemoteDatasource(); // Dapatkan instance
+      
+      final String startDateStr = DateFormat('yyyy-MM-dd').format(_selectedStartDate);
+      final String endDateStr = DateFormat('yyyy-MM-dd').format(_selectedEndDate);
+      final String fileName = 'sales_report_${startDateStr}_${endDateStr}.xlsx';
+
+      // Dapatkan direktori penyimpanan eksternal
+      final directory = await getExternalStorageDirectory();
+      if (directory == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Tidak dapat menemukan direktori penyimpanan."), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      final String filePath = '${directory.path}/$fileName';
+
+      // 2. Download file dari API via datasource
+      final Response? response = await reportService.exportSalesFile( // <-- Panggil fungsi baru di datasource
+        startDate: _selectedStartDate,
+        endDate: _selectedEndDate,
+      );
+
+      if (response != null && response.statusCode == 200) {
+        // 3. Simpan file ke perangkat
+        final file = File(filePath);
+        await file.writeAsBytes(response.data as List<int>); // respons.data adalah bytes
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Laporan berhasil diunduh ke $filePath"), backgroundColor: AppColors.primaryGreen),
+        );
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Gagal mengunduh laporan: ${response?.statusMessage ?? 'Terjadi kesalahan.'}"), backgroundColor: Colors.red),
+        );
+      }
+    } on DioException catch (e) {
+      print("Export Report Dio Error: ${e.response?.data ?? e.message}");
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Gagal mengunduh laporan: ${e.response?.data['message'] ?? e.message}"), backgroundColor: Colors.red),
+      );
+    } catch (e) {
+      print("Export Report Unexpected Error: $e");
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Terjadi kesalahan tak terduga: $e"), backgroundColor: Colors.red),
+      );
+    }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -109,7 +171,7 @@ class _SalesReportPageState extends State<SalesReportPage> {
           IconButton(
             icon: const Icon(Icons.download),
             onPressed: _exportReport,
-            tooltip: 'Ekspor ke Excel/PDF',
+            tooltip: 'Ekspor ke Excel',
           ),
         ],
       ),

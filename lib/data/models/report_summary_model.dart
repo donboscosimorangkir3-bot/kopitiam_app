@@ -24,13 +24,37 @@ class ReportSummary {
 
   factory ReportSummary.fromJson(Map<String, dynamic> json) {
     return ReportSummary(
-      totalRevenue: double.parse(json['total_revenue'].toString()),
-      totalOrders: json['total_orders'],
-      completedOrders: json['completed_orders'],
-      topProducts: (json['top_products'] as List).map((i) => TopProduct.fromJson(i)).toList(),
-      dailySales: (json['daily_sales'] as List).map((i) => DailySales.fromJson(i)).toList(),
-      startDate: DateTime.parse(json['start_date']),
-      endDate: DateTime.parse(json['end_date']),
+      totalRevenue: double.tryParse(json['total_revenue']?.toString() ?? '0') ?? 0.0,
+
+      totalOrders: int.tryParse(json['total_orders']?.toString() ?? '0') ?? 0,
+
+      completedOrders: int.tryParse(json['completed_orders']?.toString() ?? '0') ?? 0,
+
+      topProducts: (json['top_products'] as List<dynamic>?)
+              ?.map((item) => TopProduct.fromJson(item))
+              .toList() ??
+          [],
+
+      dailySales: (json['daily_sales'] as List<dynamic>?)
+              ?.map((item) => DailySales.fromJson(item))
+              .toList() ??
+          [],
+
+      startDate: DateTime.tryParse(json['start_date'] ?? '') ?? DateTime.now(),
+
+      endDate: DateTime.tryParse(json['end_date'] ?? '') ?? DateTime.now(),
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'total_revenue': totalRevenue,
+      'total_orders': totalOrders,
+      'completed_orders': completedOrders,
+      'top_products': topProducts.map((e) => e.toJson()).toList(),
+      'daily_sales': dailySales.map((e) => e.toJson()).toList(),
+      'start_date': startDate.toIso8601String(),
+      'end_date': endDate.toIso8601String(),
+    };
   }
 }

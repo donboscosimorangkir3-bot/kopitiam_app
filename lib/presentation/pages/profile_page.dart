@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:kopitiam_app/core/app_colors.dart';
 import 'package:kopitiam_app/data/datasources/auth_remote_datasource.dart';
 import 'package:kopitiam_app/data/models/user_model.dart';
+import 'edit_profile_page.dart'; // Import halaman Edit Profile
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -94,15 +95,19 @@ class _ProfilePageState extends State<ProfilePage> {
                       _buildProfileInfoRow(Icons.security, "Role", _currentUser!.role.toUpperCase()),
                       _buildProfileInfoRow(Icons.calendar_today, "Bergabung Sejak", "Tanggal"), // TODO: Tambahkan created_at jika ada di model user
                       const SizedBox(height: 20),
-                      // Tombol Edit Profil (Opsional)
+                      // Tombol Edit Profil
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
-                          onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text("Fitur Edit Profil")),
+                          onPressed: () async {
+                            // Navigasi ke halaman Edit Profile
+                            final result = await Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => EditProfilePage(user: _currentUser!)),
                             );
-                            // TODO: Navigasi ke halaman Edit Profile
+                            if (result == true) { // Jika ada perubahan, refresh profil
+                              _fetchUserProfile();
+                            }
                           },
                           icon: const Icon(Icons.edit, color: AppColors.white),
                           label: Text("Edit Profil", style: GoogleFonts.poppins(color: AppColors.white)),

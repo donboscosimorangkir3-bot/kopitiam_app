@@ -64,7 +64,7 @@ class KopitiamInfoWidget extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            "Jl. Kopi Nikmat No. 33, Pusat Kota",
+            "Jl. Patuan Nagari seberang Kejaksaan Negeri Balige, Balige, Toba Samosir",
             style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey[700]),
           ),
         ],

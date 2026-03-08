@@ -6,7 +6,8 @@ import 'package:intl/intl.dart';
 import 'package:kopitiam_app/core/app_colors.dart';
 import 'package:kopitiam_app/data/datasources/cart_remote_datasource.dart';
 import 'package:kopitiam_app/data/models/cart_item_model.dart';
-import 'package:kopitiam_app/presentation/pages/checkout_page.dart'; // Import halaman checkout
+import 'package:kopitiam_app/presentation/pages/checkout_page.dart';
+import 'package:kopitiam_app/core/api_constants.dart';
 
 class CartPage extends StatefulWidget {
   const CartPage({super.key});
@@ -261,7 +262,13 @@ class _CartPageState extends State<CartPage> {
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: Image.network(
-                item.product.imageUrl ?? 'https://via.placeholder.com/80',
+                // <-- Perubahan di sini -->
+                item.product.imageUrl != null && item.product.imageUrl!.startsWith('http')
+                    ? item.product.imageUrl!
+                    : (item.product.imageUrl != null && item.product.imageUrl!.isNotEmpty
+                        ? '${ApiConstants.baseUrl}${item.product.imageUrl!}'
+                        : 'https://via.placeholder.com/80/6DAF9F/FFFFFF?text=Kopi'), // Placeholder lebih relevan
+                // <-- Akhir perubahan di sini -->
                 width: 70,
                 height: 70,
                 fit: BoxFit.cover,
