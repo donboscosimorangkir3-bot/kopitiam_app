@@ -1,6 +1,6 @@
 // lib/data/models/order_item_model.dart
 
-import 'package:kopitiam_app/data/models/product_model.dart'; // <-- IMPORT INI
+import 'package:kopitiam_app/data/models/product_model.dart';
 
 class OrderItem {
   final int id;
@@ -10,7 +10,7 @@ class OrderItem {
   final double price;
   final int quantity;
   final double subtotal;
-  final Product? product; // <-- TAMBAHKAN INI
+  final Product? product;
 
   OrderItem({
     required this.id,
@@ -20,19 +20,23 @@ class OrderItem {
     required this.price,
     required this.quantity,
     required this.subtotal,
-    this.product, // <-- TAMBAHKAN INI DI KONSTRUKTOR
+    this.product,
   });
 
   factory OrderItem.fromJson(Map<String, dynamic> json) {
+    // Semua field numerik pakai fallback '0' jika null
+    // String field pakai fallback '' jika null
     return OrderItem(
-      id: json['id'],
-      orderId: json['order_id'],
-      productId: json['product_id'],
-      productName: json['product_name'],
-      price: double.parse(json['price'].toString()),
-      quantity: json['quantity'],
-      subtotal: double.parse(json['subtotal'].toString()),
-      product: json['product'] != null ? Product.fromJson(json['product']) : null, // <-- BACA DATA PRODUK
+      id:          json['id'] ?? 0,
+      orderId:     json['order_id'] ?? 0,
+      productId:   json['product_id'] ?? 0,
+      productName: json['product_name'] ?? 'Produk',
+      price:       double.tryParse(json['price']?.toString() ?? '0') ?? 0.0,
+      quantity:    json['quantity'] ?? 0,
+      subtotal:    double.tryParse(json['subtotal']?.toString() ?? '0') ?? 0.0,
+      product:     json['product'] != null
+                      ? Product.fromJson(json['product'])
+                      : null,
     );
   }
 }

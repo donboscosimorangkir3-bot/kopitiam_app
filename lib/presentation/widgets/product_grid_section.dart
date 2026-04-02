@@ -1,13 +1,13 @@
 // lib/presentation/widgets/product_grid_section.dart
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:kopitiam_app/core/app_colors.dart';
 import 'package:kopitiam_app/data/datasources/product_remote_datasource.dart';
 import 'package:kopitiam_app/data/models/product_model.dart';
-import 'package:kopitiam_app/presentation/pages/login_page.dart';
-import 'package:kopitiam_app/presentation/pages/product_detail_page.dart'; // Import detail page
+import 'package:kopitiam_app/presentation/pages/product_detail_page.dart';
 
 class ProductGridSection extends StatefulWidget {
   final bool isLoggedIn;
@@ -31,21 +31,18 @@ class _ProductGridSectionState extends State<ProductGridSection> {
   @override
   void initState() {
     super.initState();
-    _fetchProducts(); // Panggil saat initState
+    _fetchProducts();
   }
 
-  // Penting: Agar widget bisa update saat filter berubah dari luar
   @override
   void didUpdateWidget(covariant ProductGridSection oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Muat ulang produk jika filter kategori atau search query berubah
     if (widget.filterCategoryId != oldWidget.filterCategoryId ||
         widget.searchQuery != oldWidget.searchQuery) {
-      _fetchProducts(); // Panggil ulang untuk memuat data baru
+      _fetchProducts();
     }
   }
 
-  // Fungsi untuk memuat produk
   void _fetchProducts() {
     setState(() {
       _productsFuture = ProductRemoteDatasource().getProducts();
@@ -53,32 +50,34 @@ class _ProductGridSectionState extends State<ProductGridSection> {
   }
 
   String _formatPrice(double price) {
-    final formatCurrency = NumberFormat.currency(
+    return NumberFormat.currency(
       locale: 'id_ID',
       symbol: 'Rp ',
       decimalDigits: 0,
-    );
-    return formatCurrency.format(price);
+    ).format(price);
   }
 
-  // Fungsi untuk menangani klik pada Product Card
   void _onProductTap(Product product) {
     if (!widget.isLoggedIn) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Silakan login untuk menambahkan ${product.name} ke keranjang!"),
+          content: Text(
+            "Silakan login untuk melihat detail ${product.name}",
+            style: GoogleFonts.poppins(fontSize: 13),
+          ),
           backgroundColor: AppColors.primaryGreen,
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 90),
           duration: const Duration(seconds: 2),
         ),
       );
-      // Opsional: Langsung arahkan ke halaman login
-      // Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginPage()));
     } else {
-      // Navigasi ke Halaman Detail Produk
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => ProductDetailPage(
+          builder: (_) => ProductDetailPage(
             product: product,
             isLoggedIn: widget.isLoggedIn,
           ),
@@ -87,142 +86,565 @@ class _ProductGridSectionState extends State<ProductGridSection> {
     }
   }
 
+  // ─────────────────────────────────────────────
+  // BUILD UTAMA
+  // ─────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<Product>>(
       future: _productsFuture,
       builder: (context, snapshot) {
+        // ── LOADING ──
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator(color: AppColors.primaryGreen));
+          return _buildSkeletonGrid();
         }
+
+        // ── ERROR ──
         if (snapshot.hasError) {
-          return Center(child: Text("Error: ${snapshot.error}", style: GoogleFonts.poppins(color: AppColors.darkBrown)));
+          return _buildErrorState(snapshot.error.toString());
         }
+
+        // ── KOSONG ──
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return const Center(child: Text("Menu belum tersedia.", style: TextStyle(color: AppColors.greyText)));
+          return _buildEmptyState(
+            icon: Icons.coffee_outlined,
+            title: "Menu belum tersedia",
+            subtitle: "Belum ada produk yang ditambahkan",
+          );
         }
 
-        final products = snapshot.data!
-            .where((p) {
-              // Filter berdasarkan kategori ID
-              bool categoryMatch = widget.filterCategoryId == null || p.category_id == widget.filterCategoryId;
-              
-              // Filter berdasarkan query pencarian (nama produk)
-              bool searchMatch = widget.searchQuery == null ||
-                  widget.searchQuery!.isEmpty ||
-                  p.name.toLowerCase().contains(widget.searchQuery!.toLowerCase());
-              
-              // Jika ingin cari di deskripsi juga, tambahkan:
-              // || p.description?.toLowerCase().contains(widget.searchQuery!.toLowerCase()) == true;
+        // ── FILTER ──
+        final products = snapshot.data!.where((p) {
+          final categoryMatch = widget.filterCategoryId == null ||
+              p.category_id == widget.filterCategoryId;
+          final searchMatch = widget.searchQuery == null ||
+              widget.searchQuery!.isEmpty ||
+              p.name
+                  .toLowerCase()
+                  .contains(widget.searchQuery!.toLowerCase());
+          return categoryMatch && searchMatch;
+        }).toList();
 
-              return categoryMatch && searchMatch;
-            })
-            .toList();
-
+        // ── HASIL FILTER KOSONG ──
         if (products.isEmpty) {
-          return const Center(child: Text("Tidak ada menu di kategori ini.", style: TextStyle(color: AppColors.greyText)));
+          return _buildEmptyState(
+            icon: Icons.search_off_rounded,
+            title: "Tidak ada hasil",
+            subtitle: widget.searchQuery != null
+                ? 'Tidak ditemukan untuk "${widget.searchQuery}"'
+                : "Tidak ada menu di kategori ini",
+          );
         }
+
+        // ── GRID ──
         return GridView.builder(
-          key: ValueKey('${widget.filterCategoryId}-${widget.searchQuery}'), // <-- TAMBAHKAN KEY INI
+          key: ValueKey('${widget.filterCategoryId}-${widget.searchQuery}'),
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2,
-            crossAxisSpacing: 16.0,
-            mainAxisSpacing: 16.0,
-            childAspectRatio: 0.60, // <-- Coba 0.60, jika masih overflow coba 0.55
+            crossAxisSpacing: 14,
+            mainAxisSpacing: 14,
+            childAspectRatio: 0.62,
           ),
           itemCount: products.length,
           itemBuilder: (context, index) {
-            final product = products[index];
-            return _buildProductCard(product);
+            return _ProductCard(
+              product: products[index],
+              isLoggedIn: widget.isLoggedIn,
+              onTap: () => _onProductTap(products[index]),
+              formatPrice: _formatPrice,
+            );
           },
         );
       },
     );
   }
 
-  // WIDGET KARTU PRODUK (Perbaikan Overflow)
-  Widget _buildProductCard(Product product) {
+  // ─────────────────────────────────────────────
+  // SKELETON GRID — shimmer saat loading
+  // ─────────────────────────────────────────────
+  Widget _buildSkeletonGrid() {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 14,
+        mainAxisSpacing: 14,
+        childAspectRatio: 0.62,
+      ),
+      itemCount: 6,
+      itemBuilder: (_, __) => const _SkeletonCard(),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // EMPTY STATE
+  // ─────────────────────────────────────────────
+  Widget _buildEmptyState({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 32),
+      child: Column(
+        children: [
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              color: AppColors.primaryGreen.withOpacity(0.08),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, size: 34, color: AppColors.primaryGreen.withOpacity(0.5)),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            title,
+            style: GoogleFonts.playfairDisplay(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF555555),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            subtitle,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              color: Colors.grey.shade400,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // ERROR STATE
+  // ─────────────────────────────────────────────
+  Widget _buildErrorState(String error) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+      child: Column(
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.wifi_off_rounded,
+                size: 30, color: Colors.red.shade300),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            "Gagal memuat menu",
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            "Periksa koneksi internet Anda",
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              color: Colors.grey.shade400,
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextButton.icon(
+            onPressed: _fetchProducts,
+            icon: const Icon(Icons.refresh_rounded, size: 16),
+            label: Text(
+              "Coba lagi",
+              style: GoogleFonts.poppins(fontSize: 13),
+            ),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.primaryGreen,
+              backgroundColor: AppColors.primaryGreen.withOpacity(0.08),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════
+// PRODUCT CARD — widget terpisah agar efisien
+// ═══════════════════════════════════════════════
+class _ProductCard extends StatefulWidget {
+  final Product product;
+  final bool isLoggedIn;
+  final VoidCallback onTap;
+  final String Function(double) formatPrice;
+
+  const _ProductCard({
+    required this.product,
+    required this.isLoggedIn,
+    required this.onTap,
+    required this.formatPrice,
+  });
+
+  @override
+  State<_ProductCard> createState() => _ProductCardState();
+}
+
+class _ProductCardState extends State<_ProductCard>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _pressCtrl;
+  late Animation<double> _pressAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _pressCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 120),
+      lowerBound: 0.0,
+      upperBound: 0.03,
+    );
+    _pressAnim = CurvedAnimation(parent: _pressCtrl, curve: Curves.easeOut);
+  }
+
+  @override
+  void dispose() {
+    _pressCtrl.dispose();
+    super.dispose();
+  }
+
+  // ─────────────────────────────────────────────
+  // GAMBAR PRODUK — pakai CachedNetworkImage
+  // ─────────────────────────────────────────────
+  Widget _buildImage() {
+    final url = widget.product.imageUrl;
+
+    // Jika URL null atau kosong → langsung tampil placeholder
+    if (url == null || url.trim().isEmpty) {
+      return _buildImagePlaceholder(showIcon: true);
+    }
+
+    return CachedNetworkImage(
+      imageUrl: url,
+      fit: BoxFit.cover,
+      width: double.infinity,
+      height: double.infinity,
+      // Cache 7 hari — gambar tidak hilang saat scroll
+      cacheKey: url,
+      // Placeholder saat pertama kali load
+      placeholder: (context, _) => _buildImagePlaceholder(showIcon: false),
+      // Error: URL ada tapi gagal load (salah path, server down, dsb.)
+      errorWidget: (context, _, __) => _buildImagePlaceholder(showIcon: true),
+    );
+  }
+
+  Widget _buildImagePlaceholder({required bool showIcon}) {
+    return Container(
+      color: const Color(0xFFF0EBE0),
+      child: showIcon
+          ? Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.image_not_supported_outlined,
+                  size: 30,
+                  color: Colors.brown.withOpacity(0.22),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  "Foto belum tersedia",
+                  style: GoogleFonts.poppins(
+                    fontSize: 9.5,
+                    color: Colors.brown.withOpacity(0.30),
+                  ),
+                ),
+              ],
+            )
+          // Loading: shimmer halus
+          : const _ShimmerBox(
+              width: double.infinity,
+              height: double.infinity,
+              borderRadius: 0,
+            ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // BUILD KARTU
+  // ─────────────────────────────────────────────
+  @override
+  Widget build(BuildContext context) {
+    final product = widget.product;
+
     return GestureDetector(
-      onTap: () => _onProductTap(product),
-      child: Card(
-        elevation: 4,
-        shadowColor: Colors.black.withOpacity(0.1),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              flex: 3,
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                child: Image.network(
-                  product.imageUrl ?? 'https://via.placeholder.com/150/6DAF9F/FFFFFF?text=Kopitiam33', // Default image
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container( // Placeholder jika gambar error
-                      color: AppColors.lightCream.withOpacity(0.5),
-                      child: const Icon(Icons.coffee, size: 50, color: AppColors.greyText),
-                    );
-                  },
+      onTapDown: (_) => _pressCtrl.forward(),
+      onTapUp: (_) {
+        _pressCtrl.reverse();
+        widget.onTap();
+      },
+      onTapCancel: () => _pressCtrl.reverse(),
+      child: AnimatedBuilder(
+        animation: _pressAnim,
+        builder: (_, child) => Transform.scale(
+          scale: 1.0 - _pressAnim.value,
+          child: child,
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.07),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
+              ),
+              BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 4,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // ── GAMBAR ──
+              Expanded(
+                flex: 5,
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(16),
+                  ),
+                  child: _buildImage(),
                 ),
               ),
-            ),
-            Expanded(
-              flex: 2,
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      product.name,
-                      style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const Spacer(),
-                    // Perbaikan overflow di harga
-                    Flexible(
-                      child: Text(
-                        product.priceCold != null
-                            ? '${_formatPrice(product.price)} - ${_formatPrice(product.priceCold!)}'
-                            : _formatPrice(product.price),
+
+              // ── INFO PRODUK ──
+              Expanded(
+                flex: 3,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.fromLTRB(10, 10, 10, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Nama produk
+                      Text(
+                        product.name,
                         style: GoogleFonts.poppins(
-                          color: AppColors.primaryGreen,
                           fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                          color: const Color(0xFF1A1A1A),
+                          height: 1.3,
                         ),
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    // Tombol "Add to Cart" (hanya muncul jika isLoggedIn true)
-                    if (widget.isLoggedIn) ...[
-                      const SizedBox(height: 8),
-                      Align(
-                        alignment: Alignment.bottomRight,
-                        child: GestureDetector(
-                          onTap: () {
-                            // TODO: Logika Add to Cart
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text("Add ${product.name} ke Keranjang")),
-                            );
-                          },
-                          child: CircleAvatar(
-                            backgroundColor: AppColors.primaryGreen,
-                            radius: 18,
-                            child: const Icon(Icons.add_shopping_cart, size: 18, color: AppColors.white),
+
+                      const Spacer(),
+
+                      // Harga
+                      Text(
+                        product.priceCold != null
+                            ? '${widget.formatPrice(product.price)}\n– ${widget.formatPrice(product.priceCold!)}'
+                            : widget.formatPrice(product.price),
+                        style: GoogleFonts.poppins(
+                          color: AppColors.primaryGreen,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 11.5,
+                          height: 1.4,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+
+                      // Tombol tambah ke keranjang
+                      if (widget.isLoggedIn) ...[
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.bottomRight,
+                          child: GestureDetector(
+                            onTap: widget.onTap,
+                            child: Container(
+                              width: 34,
+                              height: 34,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    AppColors.primaryGreen,
+                                    AppColors.primaryGreen
+                                        .withOpacity(0.82),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                borderRadius:
+                                    BorderRadius.circular(10),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppColors.primaryGreen
+                                        .withOpacity(0.35),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(
+                                Icons.add_rounded,
+                                size: 19,
+                                color: Colors.white,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ]
-                  ],
+                      ],
+                    ],
+                  ),
                 ),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════
+// SKELETON CARD — placeholder saat loading grid
+// ═══════════════════════════════════════════════
+class _SkeletonCard extends StatelessWidget {
+  const _SkeletonCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Gambar skeleton
+          Expanded(
+            flex: 5,
+            child: ClipRRect(
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(16)),
+              child: const _ShimmerBox(
+                width: double.infinity,
+                height: double.infinity,
+                borderRadius: 0,
+              ),
             ),
-          ],
+          ),
+          // Teks skeleton
+          Expanded(
+            flex: 3,
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _ShimmerBox(width: double.infinity, height: 13, borderRadius: 6),
+                  const SizedBox(height: 6),
+                  _ShimmerBox(width: 100, height: 13, borderRadius: 6),
+                  const Spacer(),
+                  _ShimmerBox(width: 80, height: 12, borderRadius: 6),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════
+// SHIMMER BOX — animasi skeleton
+// ═══════════════════════════════════════════════
+class _ShimmerBox extends StatefulWidget {
+  final double width;
+  final double height;
+  final double borderRadius;
+
+  const _ShimmerBox({
+    required this.width,
+    required this.height,
+    this.borderRadius = 8,
+  });
+
+  @override
+  State<_ShimmerBox> createState() => _ShimmerBoxState();
+}
+
+class _ShimmerBoxState extends State<_ShimmerBox>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    )..repeat(reverse: true);
+    _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _anim,
+      builder: (_, __) => Container(
+        width: widget.width,
+        height: widget.height,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(widget.borderRadius),
+          gradient: LinearGradient(
+            colors: [
+              Color.lerp(
+                const Color(0xFFEDE8DF),
+                const Color(0xFFF7F3EC),
+                _anim.value,
+              )!,
+              Color.lerp(
+                const Color(0xFFF7F3EC),
+                const Color(0xFFEDE8DF),
+                _anim.value,
+              )!,
+            ],
+          ),
         ),
       ),
     );

@@ -110,4 +110,28 @@ class OrderRemoteDatasource {
       return false;
     }
   }
+  // Fungsi untuk Membuat Pesanan Manual oleh Kasir (POST /api/admin/orders/manual)
+  Future<bool> createManualOrder(Map<String, dynamic> orderData) async {
+    try {
+      final options = await _getAuthOptions();
+      if (options.headers?['Authorization'] == 'Bearer null') return false;
+
+      final response = await _dio.post(
+        '${ApiConstants.baseUrl}/admin/orders/manual',
+        data: orderData,
+        options: options,
+      );
+
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        return true;
+      }
+      return false;
+    } on DioException catch (e) {
+      print("Gagal membuat pesanan manual: ${e.response?.data}");
+      return false;
+    } catch (e) {
+      print("Error tak terduga: $e");
+      return false;
+    }
+  }
 }

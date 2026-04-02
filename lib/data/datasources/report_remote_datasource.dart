@@ -1,5 +1,6 @@
 // lib/data/datasources/report_remote_datasource.dart
 
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:kopitiam_app/core/api_constants.dart';
 import 'package:kopitiam_app/data/models/report_summary_model.dart';
@@ -15,30 +16,32 @@ class ReportRemoteDatasource {
     return prefs.getString('auth_token');
   }
 
-  Future<Options> _getAuthOptions() async {
-    final token = await _getToken();
-    return Options(
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
-  }
-
-  // GET RINGKASAN STATISTIK DASHBOARD
-  Future<ReportSummary?> getReportSummary({DateTime? startDate, DateTime? endDate}) async {
+  // ── GET RINGKASAN STATISTIK DASHBOARD ───────────
+  Future<ReportSummary?> getReportSummary({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
     try {
-      final options = await _getAuthOptions();
-      if (options.headers?['Authorization'] == 'Bearer null') return null;
+      final token = await _getToken();
+      if (token == null) return null;
 
       final Map<String, dynamic> queryParams = {};
-      if (startDate != null) queryParams['start_date'] = DateFormat('yyyy-MM-dd').format(startDate);
-      if (endDate != null) queryParams['end_date'] = DateFormat('yyyy-MM-dd').format(endDate);
+      if (startDate != null) {
+        queryParams['start_date'] = DateFormat('yyyy-MM-dd').format(startDate);
+      }
+      if (endDate != null) {
+        queryParams['end_date'] = DateFormat('yyyy-MM-dd').format(endDate);
+      }
 
       final response = await _dio.get(
-        ApiConstants.baseUrl + '/admin/reports/summary',
+        '${ApiConstants.baseUrl}/admin/reports/summary',
         queryParameters: queryParams,
-        options: options,
+        options: Options(
+          headers: {
+            'Accept': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+        ),
       );
 
       if (response.statusCode == 200) {
@@ -54,20 +57,32 @@ class ReportRemoteDatasource {
     }
   }
 
-  // GET LAPORAN PENJUALAN DETAIL
-  Future<List<Order>> getDetailedSales({DateTime? startDate, DateTime? endDate}) async {
+  // ── GET LAPORAN PENJUALAN DETAIL ─────────────────
+  Future<List<Order>> getDetailedSales({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
     try {
-      final options = await _getAuthOptions();
-      if (options.headers?['Authorization'] == 'Bearer null') return [];
+      final token = await _getToken();
+      if (token == null) return [];
 
       final Map<String, dynamic> queryParams = {};
-      if (startDate != null) queryParams['start_date'] = DateFormat('yyyy-MM-dd').format(startDate);
-      if (endDate != null) queryParams['end_date'] = DateFormat('yyyy-MM-dd').format(endDate);
+      if (startDate != null) {
+        queryParams['start_date'] = DateFormat('yyyy-MM-dd').format(startDate);
+      }
+      if (endDate != null) {
+        queryParams['end_date'] = DateFormat('yyyy-MM-dd').format(endDate);
+      }
 
       final response = await _dio.get(
-        ApiConstants.baseUrl + '/admin/reports/sales',
+        '${ApiConstants.baseUrl}/admin/reports/sales',
         queryParameters: queryParams,
-        options: options,
+        options: Options(
+          headers: {
+            'Accept': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+        ),
       );
 
       if (response.statusCode == 200) {
@@ -78,43 +93,91 @@ class ReportRemoteDatasource {
     } on DioException catch (e) {
       print("Error fetching detailed sales report: ${e.response?.data}");
       return [];
-    } catch (e) {
+    } catch (e, stackTrace) {
       print("Unexpected error when getting detailed sales report: $e");
+      print("StackTrace: ${stackTrace.toString().split('\n').take(5).join('\n')}");
       return [];
     }
   }
 
-  // FUNGSI BARU: EKSPOR LAPORAN (mengembalikan Response untuk di-download file)
-  Future<Response?> exportSalesFile({DateTime? startDate, DateTime? endDate}) async {
+  // ── EKSPOR LAPORAN KE FILE EXCEL ─────────────────
+  Future<Response?> exportSalesFile({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
     try {
-      final options = await _getAuthOptions();
-      if (options.headers?['Authorization'] == 'Bearer null') {
+      final token = await _getToken();
+      if (token == null) {
         print("Login diperlukan untuk ekspor laporan.");
         return null;
       }
 
       final Map<String, dynamic> queryParams = {};
-      if (startDate != null) queryParams['start_date'] = DateFormat('yyyy-MM-dd').format(startDate);
-      if (endDate != null) queryParams['end_date'] = DateFormat('yyyy-MM-dd').format(endDate);
+      if (startDate != null) {
+        queryParams['start_date'] = DateFormat('yyyy-MM-dd').format(startDate);
+      }
+      if (endDate != null) {
+        queryParams['end_date'] = DateFormat('yyyy-MM-dd').format(endDate);
+      }
 
-      // Set Accept header untuk menerima file Excel
-      options.headers?['Accept'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-      options.responseType = ResponseType.bytes; // Terima respons sebagai bytes
-
+      // ✅ FIX 1: Buat Options baru langsung dengan semua header sekaligus
+      //    — jangan overwrite headers setelah Options dibuat
+      // ✅ FIX 2: responseType = bytes HANYA untuk request ekspor ini
       final response = await _dio.get(
-        ApiConstants.baseUrl + '/admin/reports/export',
+        '${ApiConstants.baseUrl}/admin/reports/export',
         queryParameters: queryParams,
-        options: options,
+        options: Options(
+          headers: {
+            'Accept': 'text/csv, application/octet-stream',
+            'Authorization': 'Bearer $token',
+          },
+          responseType: ResponseType.bytes,
+          validateStatus: (status) => status != null && status < 600,
+        ),
       );
 
-      // Backend harus mengembalikan file, jadi statusCode 200 adalah sukses
-      if (response.statusCode == 200) {
-        return response; // Mengembalikan objek Response lengkap
+      final contentType = response.headers.value('content-type') ?? '';
+      final isValidFile = contentType.contains('text/csv') ||
+          contentType.contains('octet-stream') ||
+          contentType.contains('spreadsheetml');
+
+      if (response.statusCode == 200 && isValidFile) {
+        // Sukses — kembalikan response berisi bytes file Excel
+        return response;
+      } else {
+        // Server return error — decode bytes ke string untuk logging
+        final errorBody = utf8.decode(
+          response.data is List<int>
+              ? response.data as List<int>
+              : List<int>.from(response.data),
+          allowMalformed: true,
+        );
+
+        // Coba parse JSON jika bisa
+        try {
+          final decoded = jsonDecode(errorBody);
+          print("Export error ${response.statusCode}: ${decoded['message']} "
+              "(${decoded['file'] ?? ''}:${decoded['line'] ?? ''})");
+        } catch (_) {
+          // Bukan JSON (mungkin HTML) — print 200 karakter pertama saja
+          print("Export error ${response.statusCode}: "
+              "${errorBody.substring(0, errorBody.length.clamp(0, 200))}");
+        }
+        return null;
+      }
+    } on DioException catch (e) {
+      // Decode error bytes jika ada
+      if (e.response?.data is List<int>) {
+        final errorBody = utf8.decode(
+          e.response!.data as List<int>,
+          allowMalformed: true,
+        );
+        print("DioException export (${e.response?.statusCode}): "
+            "${errorBody.substring(0, errorBody.length.clamp(0, 300))}");
+      } else {
+        print("DioException export: ${e.message}");
       }
       return null;
-    } on DioException catch (e) {
-      print("Error exporting sales report: ${e.response?.data ?? e.message}");
-      return e.response; // Mengembalikan response jika ada error
     } catch (e) {
       print("Unexpected error when exporting sales report: $e");
       return null;

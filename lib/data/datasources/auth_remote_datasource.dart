@@ -41,38 +41,60 @@ class AuthRemoteDatasource {
   }
 
   // ===============================
-  // Login
-  // ===============================
-  Future<bool> login(String email, String password) async {
-    try {
-      final response = await _dio.post(
-        ApiConstants.login,
-        data: {
-          'email': email,
-          'password': password,
+// Login
+// ===============================
+Future<bool> login(String email, String password) async {
+  try {
+    final response = await _dio.post(
+      ApiConstants.login,
+      data: {
+        'email': email,
+        'password': password,
+      },
+      options: Options(
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
         },
-        options: Options(headers: {'Accept': 'application/json'}),
-      );
+      ),
+    );
 
-      if (response.statusCode == 200) {
-        final token = response.data['access_token'];
-        final userJson = response.data['data'];
+    // Debug response
+    print("STATUS: ${response.statusCode}");
+    print("RESPONSE: ${response.data}");
 
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('auth_token', token);
+    if (response.statusCode == 200) {
+      final token = response.data['access_token'];
+      final userJson = response.data['data'];
 
-        // Simpan user dalam bentuk JSON string
-        await prefs.setString('user_info', jsonEncode(userJson));
-
-        return true;
+      // Validasi agar tidak null
+      if (token == null || userJson == null) {
+        print("Login gagal: response tidak lengkap");
+        return false;
       }
 
-      return false;
-    } on DioException catch (e) {
-      print("Login Gagal: ${e.response?.data}");
-      return false;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('auth_token', token);
+
+      // Simpan user dalam bentuk JSON string
+      await prefs.setString('user_info', jsonEncode(userJson));
+
+      print("Login berhasil");
+      return true;
     }
+
+    print("Login gagal: status bukan 200");
+    return false;
+
+  } on DioException catch (e) {
+    // Debug error detail
+    print("ERROR STATUS: ${e.response?.statusCode}");
+    print("ERROR DATA: ${e.response?.data}");
+    print("ERROR MESSAGE: ${e.message}");
+
+    return false;
   }
+}
 
   // ===============================
   // Cek Login

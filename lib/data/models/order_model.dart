@@ -1,19 +1,23 @@
 // lib/data/models/order_model.dart
 
 import 'package:kopitiam_app/data/models/order_item_model.dart';
-import 'package:kopitiam_app/data/models/user_model.dart'; // <-- TAMBAHKAN IMPORT INI
+import 'package:kopitiam_app/data/models/user_model.dart';
 
 class Order {
   final int id;
   final String orderNumber;
   final double totalAmount;
-  final String status;
+  final String status; // Ini adalah order_status (pending, processing, ready, completed, cancelled)
   final String shippingAddress;
   final DateTime createdAt;
 
+  final String? paymentStatus;  // 'unpaid', 'paid' -> DITAMBAHKAN
+  final String? paymentMethod;  // 'cash_on_pickup', dll
+  final String? orderType;      // 'pickup' | 'dine-in'
+  final String? tableNumber;    // nomor meja (jika dine-in)
+
   final List<OrderItem>? items;
-  final User? user; // <-- TAMBAHKAN PROPERTI INI
-  // final Payment? payment; // Jika nanti perlu detail payment di sini
+  final User? user;
 
   Order({
     required this.id,
@@ -22,18 +26,22 @@ class Order {
     required this.status,
     required this.shippingAddress,
     required this.createdAt,
+    this.paymentStatus,
+    this.paymentMethod,
+    this.orderType,
+    this.tableNumber,
     this.items,
-    this.user, // <-- TAMBAHKAN INI DI KONSTRUKTOR
-    // this.payment,
+    this.user,
   });
 
   factory Order.fromJson(Map<String, dynamic> json) {
-    List<OrderItem> items = [];
+    List<OrderItem> items =[];
     if (json['items'] != null) {
-      items = (json['items'] as List).map((i) => OrderItem.fromJson(i)).toList();
+      items = (json['items'] as List)
+          .map((i) => OrderItem.fromJson(i))
+          .toList();
     }
-    
-    // Parsing data user dari JSON
+
     User? user;
     if (json['user'] != null) {
       user = User.fromJson(json['user']);
@@ -44,11 +52,19 @@ class Order {
       orderNumber: json['order_number'],
       totalAmount: double.parse(json['total_amount'].toString()),
       status: json['status'],
-      shippingAddress: json['shipping_address'],
+      shippingAddress: json['shipping_address'] ?? '',
       createdAt: DateTime.parse(json['created_at']),
+      paymentStatus: json['payment'] != null 
+        ? json['payment']['payment_status'] 
+        : 'unpaid', 
+        
+    paymentMethod: json['payment'] != null 
+        ? json['payment']['payment_method'] 
+        : null,
+      orderType: json['order_type'],
+      tableNumber: json['table_number']?.toString(),
       items: items,
-      user: user, // <-- BACA DATA USER DARI JSON
-      // payment: json['payment'] != null ? Payment.fromJson(json['payment']) : null,
+      user: user,
     );
   }
 }
