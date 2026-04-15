@@ -23,6 +23,7 @@ import 'package:kopitiam_app/presentation/pages/sales_report_page.dart';
 import 'package:kopitiam_app/presentation/pages/staff_management_page.dart';
 import 'package:kopitiam_app/presentation/pages/cafe_info_management_page.dart';
 import 'package:kopitiam_app/presentation/pages/table_management_page.dart';
+import 'package:kopitiam_app/presentation/pages/profile_management_page.dart';
 
 class OwnerDashboardPage extends StatefulWidget {
   final User user;
@@ -234,125 +235,160 @@ class _OwnerDashboardPageState extends State<OwnerDashboardPage>
     );
   }
 
-  // ─────────────────────────────────────────────────
-  // HEADER
-  // ─────────────────────────────────────────────────
   Widget _buildHeader() {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppColors.primaryGreen,
-            AppColors.primaryGreen.withOpacity(0.82)
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+  return Container(
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        colors: [
+          AppColors.primaryGreen,
+          AppColors.primaryGreen.withOpacity(0.82)
+        ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
       ),
-      child: Stack(
-        children: [
-          Positioned(top: -25, right: -20, child: _circle(140, 0.07)),
-          Positioned(top: 50, right: 65, child: _circle(55, 0.08)),
-          Positioned(bottom: -10, left: -30, child: _circle(80, 0.05)),
+    ),
+    child: Stack(
+      children: [
+        Positioned(top: -25, right: -20, child: _circle(140, 0.07)),
+        Positioned(top: 50, right: 65, child: _circle(55, 0.08)),
+        Positioned(bottom: -10, left: -30, child: _circle(80, 0.05)),
 
-          SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 14, 16, 20),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "${_getGreeting()},",
-                          style: GoogleFonts.poppins(
-                              fontSize: 12.5, color: Colors.white70),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          widget.user.name,
-                          style: GoogleFonts.playfairDisplay(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.18),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.workspace_premium_rounded,
-                                  color: Colors.amber, size: 13),
-                              const SizedBox(width: 5),
-                              Text("Pemilik",
-                                  style: GoogleFonts.poppins(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white)),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Refresh
-                  GestureDetector(
-                    onTap: _fetchReportSummary,
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      margin: const EdgeInsets.only(right: 10),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.18),
-                        shape: BoxShape.circle,
-                        border:
-                            Border.all(color: Colors.white.withOpacity(0.3)),
+        SafeArea(
+          bottom: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 16, 20),
+            child: Row(
+              children: [
+                // ================= LEFT =================
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "${_getGreeting()},",
+                        style: GoogleFonts.poppins(
+                            fontSize: 12.5, color: Colors.white70),
                       ),
-                      child: const Icon(Icons.refresh_rounded,
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.user.name,
+                        style: GoogleFonts.playfairDisplay(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.18),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.workspace_premium_rounded,
+                                color: Colors.amber, size: 13),
+                            const SizedBox(width: 5),
+                            Text(
+                              "Pemilik",
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // ================= RIGHT =================
+
+                // 🔄 REFRESH
+                GestureDetector(
+                  onTap: _fetchReportSummary,
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    margin: const EdgeInsets.only(right: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.18),
+                      shape: BoxShape.circle,
+                      border:
+                          Border.all(color: Colors.white.withOpacity(0.3)),
+                    ),
+                    child: const Icon(Icons.refresh_rounded,
+                        color: Colors.white, size: 20),
+                  ),
+                ),
+
+                // 👤 PROFILE (TAMBAHAN BARU)
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            ProfileManagementPage(user: widget.user),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    margin: const EdgeInsets.only(right: 10),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                          color: Colors.white.withOpacity(0.4)),
+                    ),
+                    child: CircleAvatar(
+                      backgroundColor: Colors.white.withOpacity(0.2),
+                      child: const Icon(Icons.person_rounded,
                           color: Colors.white, size: 20),
                     ),
                   ),
-                  // Logout
-                  GestureDetector(
-                    onTap: () async {
-                      await AuthRemoteDatasource().logout();
-                      if (!mounted) return;
-                      Navigator.pushAndRemoveUntil(
-                        context,
-                        MaterialPageRoute(builder: (_) => const LoginPage()),
-                        (route) => false,
-                      );
-                    },
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.18),
-                        shape: BoxShape.circle,
-                        border:
-                            Border.all(color: Colors.white.withOpacity(0.3)),
-                      ),
-                      child: const Icon(Icons.logout_rounded,
-                          color: Colors.white, size: 20),
+                ),
+
+                // 🚪 LOGOUT
+                GestureDetector(
+                  onTap: () async {
+                    await AuthRemoteDatasource().logout();
+                    if (!mounted) return;
+                    Navigator.pushAndRemoveUntil(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const LoginPage()),
+                      (route) => false,
+                    );
+                  },
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.18),
+                      shape: BoxShape.circle,
+                      border:
+                          Border.all(color: Colors.white.withOpacity(0.3)),
                     ),
+                    child: const Icon(Icons.logout_rounded,
+                        color: Colors.white, size: 20),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _circle(double size, double opacity) => Container(
         width: size,

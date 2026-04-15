@@ -2,51 +2,61 @@ import 'package:dio/dio.dart';
 import 'package:kopitiam_app/core/api_constants.dart';
 import 'package:kopitiam_app/data/models/table_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
 
 class TableRemoteDatasource {
   final _dio = Dio();
 
+  // ─── Helper: Ambil Token ────────────────────────────────────────────────────
+
+  Future<String?> _getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('auth_token');
+  }
+
+  Options _authOptions(String? token) =>
+      Options(headers: {'Authorization': 'Bearer $token'});
+
+  // ─── Get All Tables ─────────────────────────────────────────────────────────
+
   Future<List<TableModel>> getTables() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('auth_token');
-      final options = Options(headers: {'Authorization': 'Bearer $token'});
-
+      final token = await _getToken();
       final response = await _dio.get(
         '${ApiConstants.baseUrl}/tables',
-        options: options,
+        options: _authOptions(token),
       );
 
-      // Debug: print response untuk cek struktur
-      print('[getTables] response.data: ${response.data}');
+      debugPrint('[getTables] response.data: ${response.data}');
 
-      // Handle berbagai kemungkinan struktur response
       final raw = response.data;
       List dataList;
+
       if (raw is List) {
         dataList = raw;
       } else if (raw is Map && raw['data'] is List) {
-        dataList = raw['data'];
+        dataList = raw['data'] as List;
       } else {
-        print('[getTables] Struktur response tidak dikenali: $raw');
+        debugPrint('[getTables] Struktur response tidak dikenali: $raw');
         return [];
       }
 
       return dataList.map((e) => TableModel.fromJson(e)).toList();
     } catch (e, stack) {
-      print('[getTables] ERROR: $e');
-      print(stack);
+      debugPrint('[getTables] ERROR: $e');
+      debugPrint('$stack');
       return [];
     }
   }
 
+  // ─── Save Table (Tambah / Edit Nomor) ──────────────────────────────────────
+
   Future<bool> saveTable(String number, {int? id}) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('auth_token');
-      final options = Options(headers: {'Authorization': 'Bearer $token'});
+      final token = await _getToken();
+      final options = _authOptions(token);
 
-      Response response;
+      final Response response;
       if (id == null) {
         response = await _dio.post(
           '${ApiConstants.baseUrl}/tables',
@@ -61,28 +71,49 @@ class TableRemoteDatasource {
         );
       }
 
-      print('[saveTable] status: ${response.statusCode}, data: ${response.data}');
+      debugPrint('[saveTable] status: ${response.statusCode}, data: ${response.data}');
       return response.statusCode == 200 || response.statusCode == 201;
     } catch (e, stack) {
-      print('[saveTable] ERROR: $e');
-      print(stack);
+      debugPrint('[saveTable] ERROR: $e');
+      debugPrint('$stack');
       return false;
     }
   }
 
+  // ─── Update Table Status (Aktif / Rusak) ───────────────────────────────────
+
+  Future<bool> updateTable(int id, String number, bool isAvailable) async {
+    try {
+      final token = await _getToken();
+      final response = await _dio.put(
+        '${ApiConstants.baseUrl}/tables/$id',
+        data: {
+          'number': number,
+          'is_available': isAvailable ? 1 : 0,
+        },
+        options: _authOptions(token),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint('[updateTable] ERROR: $e');
+      return false;
+    }
+  }
+
+  // ─── Delete Table ───────────────────────────────────────────────────────────
+
   Future<bool> deleteTable(int id) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('auth_token');
+      final token = await _getToken();
       final response = await _dio.delete(
         '${ApiConstants.baseUrl}/tables/$id',
-        options: Options(headers: {'Authorization': 'Bearer $token'}),
+        options: _authOptions(token),
       );
-      print('[deleteTable] status: ${response.statusCode}');
-      return true;
+      debugPrint('[deleteTable] status: ${response.statusCode}');
+      return response.statusCode == 200;
     } catch (e, stack) {
-      print('[deleteTable] ERROR: $e');
-      print(stack);
+      debugPrint('[deleteTable] ERROR: $e');
+      debugPrint('$stack');
       return false;
     }
   }

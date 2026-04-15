@@ -1,12 +1,15 @@
 // lib/presentation/pages/login_page.dart
 
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kopitiam_app/core/app_colors.dart';
 import 'package:kopitiam_app/data/datasources/auth_remote_datasource.dart';
 import 'package:kopitiam_app/presentation/pages/initial_wrapper_page.dart';
 import 'package:kopitiam_app/presentation/pages/register_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:kopitiam_app/presentation/pages/otp_page.dart';
+import 'package:kopitiam_app/presentation/pages/forgot_password_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -57,19 +60,20 @@ class _LoginPageState extends State<LoginPage> {
   // HANDLE LOGIN
   // =========================
   Future<void> _handleLogin() async {
-    if (_emailController.text.isEmpty ||
-        _passwordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Email dan Password harus diisi!"),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
+  if (_emailController.text.isEmpty ||
+      _passwordController.text.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Email dan Password harus diisi!"),
+        backgroundColor: Colors.red,
+      ),
+    );
+    return;
+  }
 
-    setState(() => _isLoading = true);
+  setState(() => _isLoading = true);
 
+  try {
     final authService = AuthRemoteDatasource();
     final success = await authService.login(
       _emailController.text.trim(),
@@ -95,7 +99,8 @@ class _LoginPageState extends State<LoginPage> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-            builder: (_) => const InitialWrapperPage()),
+          builder: (_) => const InitialWrapperPage(),
+        ),
       );
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -104,13 +109,53 @@ class _LoginPageState extends State<LoginPage> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content:
-              Text("Login Gagal. Cek email/password Anda."),
+          content: Text("Login Gagal. Cek email/password Anda."),
           backgroundColor: Colors.red,
         ),
       );
     }
+  } on DioException catch (e) {
+    if (!mounted) return;
+
+    setState(() => _isLoading = false);
+
+    // Jika belum verifikasi (403)
+    if (e.response?.statusCode == 403) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Colors.orange,
+          content: Text("Akun belum diverifikasi. Silakan OTP."),
+        ),
+      );
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) =>
+              OtpPage(email: _emailController.text.trim()),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Email atau Password salah"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  } catch (e) {
+    if (!mounted) return;
+
+    setState(() => _isLoading = false);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Terjadi kesalahan, coba lagi."),
+        backgroundColor: Colors.red,
+      ),
+    );
   }
+}
 
   // =========================
   // BUILD UI
@@ -209,22 +254,21 @@ class _LoginPageState extends State<LoginPage> {
                     ],
                   ),
                   TextButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context)
-                          .showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                              "Fitur Lupa Password belum diimplementasi."),
-                        ),
-                      );
-                    },
-                    child: Text(
-                      "Lupa Password?",
-                      style: GoogleFonts.poppins(
-                          color:
-                              AppColors.white),
-                    ),
-                  ),
+  onPressed: () {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const ForgotPasswordPage(),
+      ),
+    );
+  },
+  child: Text(
+    "Lupa Password?",
+    style: GoogleFonts.poppins(
+      color: AppColors.white,
+    ),
+  ),
+),
                 ],
               ),
               const SizedBox(height: 40),

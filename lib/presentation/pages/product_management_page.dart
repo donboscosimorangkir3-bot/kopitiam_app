@@ -1,5 +1,6 @@
 // lib/presentation/pages/product_management_page.dart
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -73,9 +74,7 @@ class _ProductManagementPageState extends State<ProductManagementPage>
     final q = _searchQuery.toLowerCase();
     _filtered = q.isEmpty
         ? List.from(_products)
-        : _products
-            .where((p) => p.name.toLowerCase().contains(q))
-            .toList();
+        : _products.where((p) => p.name.toLowerCase().contains(q)).toList();
   }
 
   String _formatPrice(double price) => NumberFormat.currency(
@@ -115,7 +114,8 @@ class _ProductManagementPageState extends State<ProductManagementPage>
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 60, height: 60,
+                width: 60,
+                height: 60,
                 decoration: BoxDecoration(
                   color: Colors.red.withOpacity(0.1),
                   shape: BoxShape.circle,
@@ -145,7 +145,8 @@ class _ProductManagementPageState extends State<ProductManagementPage>
                     child: OutlinedButton(
                       onPressed: () => Navigator.pop(context, false),
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                         side: BorderSide(color: Colors.grey.shade300),
@@ -163,7 +164,8 @@ class _ProductManagementPageState extends State<ProductManagementPage>
                       onPressed: () => Navigator.pop(context, true),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.redAccent,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                         elevation: 0,
@@ -242,7 +244,8 @@ class _ProductManagementPageState extends State<ProductManagementPage>
               child: _isLoading
                   ? const Center(
                       child: CircularProgressIndicator(
-                          color: AppColors.primaryGreen, strokeWidth: 2.5),
+                          color: AppColors.primaryGreen,
+                          strokeWidth: 2.5),
                     )
                   : _hasError
                       ? _buildErrorState()
@@ -262,10 +265,10 @@ class _ProductManagementPageState extends State<ProductManagementPage>
                                           "${_filtered.length} produk",
                                           style: GoogleFonts.poppins(
                                               fontSize: 12.5,
-                                              color: Colors.grey.shade500),
+                                              color:
+                                                  Colors.grey.shade500),
                                         ),
                                         const Spacer(),
-                                        // Stok rendah badge
                                         if (_products
                                             .where((p) => p.stock <= 5)
                                             .isNotEmpty)
@@ -278,20 +281,24 @@ class _ProductManagementPageState extends State<ProductManagementPage>
                                               color: Colors.orange
                                                   .withOpacity(0.12),
                                               borderRadius:
-                                                  BorderRadius.circular(20),
+                                                  BorderRadius.circular(
+                                                      20),
                                             ),
                                             child: Row(
-                                              mainAxisSize: MainAxisSize.min,
+                                              mainAxisSize:
+                                                  MainAxisSize.min,
                                               children: [
                                                 Icon(
-                                                    Icons.warning_amber_rounded,
+                                                    Icons
+                                                        .warning_amber_rounded,
                                                     size: 12,
                                                     color: Colors
                                                         .orange.shade700),
                                                 const SizedBox(width: 4),
                                                 Text(
                                                   "${_products.where((p) => p.stock <= 5).length} stok hampir habis",
-                                                  style: GoogleFonts.poppins(
+                                                  style:
+                                                      GoogleFonts.poppins(
                                                     fontSize: 11,
                                                     fontWeight:
                                                         FontWeight.w600,
@@ -309,11 +316,13 @@ class _ProductManagementPageState extends State<ProductManagementPage>
                                     child: ListView.builder(
                                       physics:
                                           const BouncingScrollPhysics(),
-                                      padding: const EdgeInsets.fromLTRB(
-                                          16, 6, 16, 100),
+                                      padding:
+                                          const EdgeInsets.fromLTRB(
+                                              16, 6, 16, 100),
                                       itemCount: _filtered.length,
                                       itemBuilder: (_, i) =>
-                                          _buildProductCard(_filtered[i]),
+                                          _buildProductCard(
+                                              _filtered[i]),
                                     ),
                                   ),
                                 ],
@@ -323,8 +332,6 @@ class _ProductManagementPageState extends State<ProductManagementPage>
           ),
         ],
       ),
-
-      // FAB
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _navigateToForm(),
         backgroundColor: AppColors.primaryGreen,
@@ -335,8 +342,8 @@ class _ProductManagementPageState extends State<ProductManagementPage>
                 color: Colors.white,
                 fontSize: 13)),
         elevation: 4,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20)),
       ),
     );
   }
@@ -373,7 +380,8 @@ class _ProductManagementPageState extends State<ProductManagementPage>
                   ),
                   const SizedBox(width: 4),
                   Container(
-                    width: 36, height: 36,
+                    width: 36,
+                    height: 36,
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.18),
                       shape: BoxShape.circle,
@@ -394,7 +402,8 @@ class _ProductManagementPageState extends State<ProductManagementPage>
                         Text("Kelola semua produk kopitiam33 di sini",
                             style: GoogleFonts.poppins(
                                 fontSize: 11,
-                                color: Colors.white.withOpacity(0.7))),
+                                color:
+                                    Colors.white.withOpacity(0.7))),
                       ],
                     ),
                   ),
@@ -408,7 +417,8 @@ class _ProductManagementPageState extends State<ProductManagementPage>
   }
 
   Widget _circle(double size, double opacity) => Container(
-        width: size, height: size,
+        width: size,
+        height: size,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: Colors.white.withOpacity(opacity),
@@ -452,8 +462,8 @@ class _ProductManagementPageState extends State<ProductManagementPage>
               : null,
           filled: true,
           fillColor: const Color(0xFFF7F2EA),
-          contentPadding:
-              const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+          contentPadding: const EdgeInsets.symmetric(
+              vertical: 10, horizontal: 16),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
             borderSide: BorderSide.none,
@@ -465,10 +475,14 @@ class _ProductManagementPageState extends State<ProductManagementPage>
 
   // ─────────────────────────────────────────────────
   // PRODUCT CARD
+  // FIX: gunakan CachedNetworkImage agar gambar
+  // tidak hilang-hilang dan ter-cache dengan baik
   // ─────────────────────────────────────────────────
   Widget _buildProductCard(Product product) {
     final isLowStock = product.stock <= 5;
     final hasVariant = product.priceCold != null;
+    final hasImage =
+        product.imageUrl != null && product.imageUrl!.trim().isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -489,23 +503,28 @@ class _ProductManagementPageState extends State<ProductManagementPage>
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── GAMBAR ──
+          // ── GAMBAR — CachedNetworkImage ──
           ClipRRect(
             borderRadius: const BorderRadius.only(
               topLeft: Radius.circular(20),
               bottomLeft: Radius.circular(20),
             ),
-            child: product.imageUrl != null &&
-                    product.imageUrl!.isNotEmpty
-                ? Image.network(
-                    product.imageUrl!,
-                    width: 90,
-                    height: 110,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) =>
-                        _placeholderImage(),
-                  )
-                : _placeholderImage(),
+            child: SizedBox(
+              width: 90,
+              height: 110,
+              child: hasImage
+                  ? CachedNetworkImage(
+                      imageUrl: product.imageUrl!,
+                      fit: BoxFit.cover,
+                      // Key unik per produk agar cache tidak bentrok
+                      cacheKey: 'product_thumb_${product.id}',
+                      // Shimmer saat loading
+                      placeholder: (_, __) => _buildImageShimmer(),
+                      // Fallback jika error
+                      errorWidget: (_, __, ___) => _placeholderImage(),
+                    )
+                  : _placeholderImage(),
+            ),
           ),
 
           // ── INFO ──
@@ -516,13 +535,15 @@ class _ProductManagementPageState extends State<ProductManagementPage>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Nama
-                  Text(product.name,
-                      style: GoogleFonts.playfairDisplay(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                          color: const Color(0xFF1A1A1A)),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis),
+                  Text(
+                    product.name,
+                    style: GoogleFonts.playfairDisplay(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: const Color(0xFF1A1A1A)),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
 
                   const SizedBox(height: 5),
 
@@ -590,11 +611,13 @@ class _ProductManagementPageState extends State<ProductManagementPage>
                       ),
                       if (isLowStock) ...[
                         const SizedBox(width: 6),
-                        Text("Hampir habis!",
-                            style: GoogleFonts.poppins(
-                                fontSize: 10.5,
-                                color: Colors.orange.shade600,
-                                fontStyle: FontStyle.italic)),
+                        Text(
+                          "Hampir habis!",
+                          style: GoogleFonts.poppins(
+                              fontSize: 10.5,
+                              color: Colors.orange.shade600,
+                              fontStyle: FontStyle.italic),
+                        ),
                       ],
                     ],
                   ),
@@ -617,7 +640,8 @@ class _ProductManagementPageState extends State<ProductManagementPage>
                 _actionBtn(
                   icon: Icons.delete_outline_rounded,
                   color: Colors.redAccent,
-                  onTap: () => _deleteProduct(product.id, product.name),
+                  onTap: () =>
+                      _deleteProduct(product.id, product.name),
                 ),
               ],
             ),
@@ -627,19 +651,42 @@ class _ProductManagementPageState extends State<ProductManagementPage>
     );
   }
 
-  Widget _placeholderImage() {
+  // Shimmer saat gambar sedang loading
+  Widget _buildImageShimmer() {
     return Container(
       width: 90,
       height: 110,
       decoration: BoxDecoration(
-        color: AppColors.primaryGreen.withOpacity(0.08),
+        color: Colors.grey.shade200,
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(20),
           bottomLeft: Radius.circular(20),
         ),
       ),
-      child: Icon(Icons.local_cafe_rounded,
-          size: 36, color: AppColors.primaryGreen.withOpacity(0.4)),
+      child: Center(
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: AppColors.primaryGreen.withOpacity(0.4),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Placeholder jika tidak ada gambar / gambar error
+  Widget _placeholderImage() {
+    return Container(
+      width: 90,
+      height: 110,
+      color: AppColors.primaryGreen.withOpacity(0.08),
+      child: Icon(
+        Icons.local_cafe_rounded,
+        size: 36,
+        color: AppColors.primaryGreen.withOpacity(0.4),
+      ),
     );
   }
 
@@ -667,7 +714,8 @@ class _ProductManagementPageState extends State<ProductManagementPage>
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 34, height: 34,
+        width: 34,
+        height: 34,
         decoration: BoxDecoration(
           color: color.withOpacity(0.09),
           borderRadius: BorderRadius.circular(10),
@@ -678,7 +726,7 @@ class _ProductManagementPageState extends State<ProductManagementPage>
   }
 
   // ─────────────────────────────────────────────────
-  // EMPTY & ERROR
+  // EMPTY & ERROR STATE
   // ─────────────────────────────────────────────────
   Widget _buildEmptyState() {
     final isSearch = _searchQuery.isNotEmpty;
@@ -689,7 +737,8 @@ class _ProductManagementPageState extends State<ProductManagementPage>
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 80, height: 80,
+              width: 80,
+              height: 80,
               decoration: BoxDecoration(
                 color: AppColors.primaryGreen.withOpacity(0.1),
                 shape: BoxShape.circle,
@@ -704,7 +753,9 @@ class _ProductManagementPageState extends State<ProductManagementPage>
             ),
             const SizedBox(height: 16),
             Text(
-              isSearch ? "Produk Tidak Ditemukan" : "Belum Ada Produk",
+              isSearch
+                  ? "Produk Tidak Ditemukan"
+                  : "Belum Ada Produk",
               style: GoogleFonts.playfairDisplay(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -762,7 +813,8 @@ class _ProductManagementPageState extends State<ProductManagementPage>
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 80, height: 80,
+              width: 80,
+              height: 80,
               decoration: BoxDecoration(
                 color: Colors.red.withOpacity(0.08),
                 shape: BoxShape.circle,
@@ -777,12 +829,14 @@ class _ProductManagementPageState extends State<ProductManagementPage>
                     fontWeight: FontWeight.bold,
                     color: const Color(0xFF1A1A1A))),
             const SizedBox(height: 8),
-            Text("Periksa koneksi internetmu\nlalu coba lagi.",
-                textAlign: TextAlign.center,
-                style: GoogleFonts.poppins(
-                    fontSize: 13,
-                    color: Colors.grey.shade500,
-                    height: 1.6)),
+            Text(
+              "Periksa koneksi internetmu\nlalu coba lagi.",
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  color: Colors.grey.shade500,
+                  height: 1.6),
+            ),
             const SizedBox(height: 24),
             GestureDetector(
               onTap: _fetchProducts,

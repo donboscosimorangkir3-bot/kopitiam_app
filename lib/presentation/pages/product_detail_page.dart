@@ -481,7 +481,7 @@ class _ProductDetailPageState extends State<ProductDetailPage>
             Expanded(
               child: _buildTempOption(
                 variant: 'Hot',
-                label: 'Panas',
+                label: 'Hot',
                 emoji: '☕',
                 price: widget.product.price,
                 accentColor: Colors.orange.shade700,
@@ -493,7 +493,7 @@ class _ProductDetailPageState extends State<ProductDetailPage>
             Expanded(
               child: _buildTempOption(
                 variant: 'Cold',
-                label: 'Dingin',
+                label: 'Cold',
                 emoji: '🧊',
                 price: widget.product.priceCold!,
                 accentColor: Colors.blue.shade600,

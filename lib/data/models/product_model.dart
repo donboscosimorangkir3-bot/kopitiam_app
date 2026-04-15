@@ -1,4 +1,5 @@
 // lib/data/models/product_model.dart
+import 'package:kopitiam_app/data/models/category_model.dart';
 
 class Product {
   final int id;
@@ -9,6 +10,7 @@ class Product {
   final double? priceCold;
   final String? imageUrl;
   final int stock;
+  final Category? category;
 
   Product({
     required this.id,
@@ -19,6 +21,7 @@ class Product {
     this.priceCold,
     this.imageUrl,
     required this.stock,
+    this.category,
   });
 
   factory Product.fromJson(Map<String, dynamic> json) {
@@ -33,6 +36,8 @@ class Product {
           : null,
       imageUrl: json['image_url'],
       stock: json['stock'],
-    );
+category: json['category'] != null
+          ? Category.fromJson(json['category']) // <-- UBAH DI SINI
+          : null,    );
   }
 }

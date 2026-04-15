@@ -338,11 +338,11 @@ class _InitialWrapperPageState extends State<InitialWrapperPage>
               const SizedBox(height: 18),
               Row(
                 children: [
-                  _buildHeroStat("☕", "20+", "Varian Kopi"),
+                  _buildHeroStat("☕", "20+", "Jenis Minuman"),
                   const SizedBox(width: 20),
-                  _buildHeroStat("🍴", "30+", "Menu Makanan"),
+                  _buildHeroStat("🍴", "20+", "Menu Makanan"),
                   const SizedBox(width: 20),
-                  _buildHeroStat("⭐", "4.9", "Rating"),
+                  _buildHeroStat("⭐", "4.8", "Rating"),
                 ],
               ),
             ],

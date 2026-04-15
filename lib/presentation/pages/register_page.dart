@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:kopitiam_app/core/app_colors.dart';
 import 'package:kopitiam_app/data/datasources/auth_remote_datasource.dart';
 import 'package:kopitiam_app/presentation/pages/login_page.dart';
+import 'package:kopitiam_app/presentation/pages/otp_page.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -22,59 +23,63 @@ class _RegisterPageState extends State<RegisterPage> {
   bool _isPasswordVisible = false;
 
   void _handleRegister() async {
-    if (_nameController.text.isEmpty ||
-        _emailController.text.isEmpty ||
-        _passwordController.text.isEmpty ||
-        _phoneController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Semua field harus diisi!"),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
+  // 🔒 Validasi input
+  if (_nameController.text.isEmpty ||
+      _emailController.text.isEmpty ||
+      _passwordController.text.isEmpty ||
+      _phoneController.text.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Semua field harus diisi!"),
+        backgroundColor: Colors.red,
+      ),
+    );
+    return;
+  }
 
-    setState(() {
-      _isLoading = true;
-    });
+  setState(() => _isLoading = true);
 
-    final authService = AuthRemoteDatasource();
-    // Panggil fungsi register di backend
-    bool success = await authService.register(
-      _nameController.text,
-      _emailController.text,
-      _passwordController.text,
-      _phoneController.text,
+  final authService = AuthRemoteDatasource();
+
+  final success = await authService.register(
+    _nameController.text,
+    _emailController.text,
+    _passwordController.text,
+    _phoneController.text,
+  );
+
+  setState(() => _isLoading = false);
+
+  if (!mounted) return;
+
+  if (success) {
+    // ✅ SnackBar sukses
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Registrasi berhasil! Silakan cek email untuk OTP."),
+      ),
     );
 
-    setState(() {
-      _isLoading = false;
-    });
+    // ✅ LANGSUNG KE OTP (TANPA KE LOGIN DULU)
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => OtpPage(email: _emailController.text),
+      ),
+    );
 
-    if (success) {
-      if (!mounted) return;
-      // Jika register berhasil, langsung arahkan ke halaman Login
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginPage()),
-      );
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Register Berhasil! Silakan Login."),
-          backgroundColor: AppColors.primaryGreen,
+  } else {
+    // ❌ Gagal register
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          "Register gagal. Cek data atau email sudah terdaftar.",
         ),
-      );
-    } else {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Register Gagal. Cek data Anda / email mungkin sudah terdaftar."),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
+        backgroundColor: Colors.red,
+      ),
+    );
   }
+}
 
   @override
   Widget build(BuildContext context) {

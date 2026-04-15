@@ -10,4 +10,12 @@ class TableModel {
     number: json['number'],
     isAvailable: json['is_available'] == 1 || json['is_available'] == true,
   );
+
+Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'number': number,
+      'is_available': isAvailable,
+    };
+  }
 }

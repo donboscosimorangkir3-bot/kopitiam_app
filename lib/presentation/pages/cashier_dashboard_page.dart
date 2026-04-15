@@ -128,11 +128,19 @@ class _CashierDashboardPageState extends State<CashierDashboardPage>
   int _countByStatus(String status) =>
       _allOrders.where((o) => o.status == status).length;
 
-  // Karena "paid" sudah dihilangkan dari order_status, 
-  // maka order yang mendatangkan uang adalah processing, ready, dan completed.
-  double _totalRevenue() => _allOrders
-      .where((o) => o.status == 'processing' || o.status == 'ready' || o.status == 'completed')
-      .fold(0, (sum, o) => sum + o.totalAmount);
+  // ✅ PERBAIKAN: Filter pendapatan hanya untuk pesanan HARI INI
+  double _totalRevenue() {
+    final now = DateTime.now();
+    return _allOrders
+        .where((o) =>
+            (o.status == 'processing' ||
+             o.status == 'ready' ||
+             o.status == 'completed') &&
+            o.createdAt.year == now.year &&
+            o.createdAt.month == now.month &&
+            o.createdAt.day == now.day)
+        .fold(0.0, (sum, o) => sum + o.totalAmount);
+  }
 
   // ── Fungsi Proses Aksi Tombol ────────────────────────
   Future<void> _processAction(Order order, String newStatus, String title, String subtitle, IconData icon) async {
