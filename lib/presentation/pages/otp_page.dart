@@ -7,6 +7,7 @@ import 'package:kopitiam_app/core/app_colors.dart';
 import 'package:kopitiam_app/data/datasources/auth_remote_datasource.dart';
 import 'package:kopitiam_app/presentation/pages/customer_home_page.dart';
 
+
 class OtpPage extends StatefulWidget {
   final String email;
   const OtpPage({super.key, required this.email});
@@ -56,41 +57,46 @@ class _OtpPageState extends State<OtpPage> {
   }
   // -------------------
 
-  void _handleVerify() async {
-    if (_otpController.text.length < 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Masukkan 6 digit kode OTP")),
-      );
-      return;
-    }
+void _handleVerify() async {
+  // Pastikan dicek 6 digit sesuai backend
+  if (_otpController.text.length < 6) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Masukkan 6 digit kode OTP")),
+    );
+    return;
+  }
 
-    setState(() => _isLoading = true);
+  setState(() => _isLoading = true);
+  
+  // Panggil fungsi verifyOtp dari datasource
+  final success = await AuthRemoteDatasource().verifyOtp(
+    widget.email, 
+    _otpController.text
+  );
+
+  setState(() => _isLoading = false);
+
+  if (success) {
+    _timer?.cancel(); // Stop timer
+    if (!mounted) return;
     
-    final success = await AuthRemoteDatasource().verifyOtp(
-      widget.email, 
-      _otpController.text
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(backgroundColor: Colors.green, content: Text("Akun Berhasil Diverifikasi!")),
     );
 
-    setState(() => _isLoading = false);
-
-    if (success) {
-      _timer?.cancel(); // Stop timer jika berhasil
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(backgroundColor: Colors.green, content: Text("Akun Berhasil Diverifikasi!")),
-      );
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const CustomerHomePage()),
-        (route) => false,
-      );
-    } else {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(backgroundColor: Colors.red, content: Text("Kode OTP Salah atau Kadaluarsa")),
-      );
-    }
+    // Navigasi ke halaman utama Customer
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const CustomerHomePage()),
+      (route) => false,
+    );
+  } else {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(backgroundColor: Colors.red, content: Text("Kode OTP Salah atau Kadaluarsa")),
+    );
   }
+}
 
   @override
   Widget build(BuildContext context) {

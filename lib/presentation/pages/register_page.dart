@@ -22,61 +22,33 @@ class _RegisterPageState extends State<RegisterPage> {
   bool _isLoading = false;
   bool _isPasswordVisible = false;
 
-  void _handleRegister() async {
-  // 🔒 Validasi input
-  if (_nameController.text.isEmpty ||
-      _emailController.text.isEmpty ||
-      _passwordController.text.isEmpty ||
-      _phoneController.text.isEmpty) {
+void _handleRegister() async {
+  if (_nameController.text.isEmpty || _emailController.text.isEmpty ||
+      _passwordController.text.isEmpty || _phoneController.text.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Semua field harus diisi!"),
-        backgroundColor: Colors.red,
-      ),
+      const SnackBar(content: Text("Semua field harus diisi!"), backgroundColor: Colors.red),
     );
     return;
   }
 
   setState(() => _isLoading = true);
-
-  final authService = AuthRemoteDatasource();
-
-  final success = await authService.register(
-    _nameController.text,
-    _emailController.text,
-    _passwordController.text,
-    _phoneController.text,
+  final success = await AuthRemoteDatasource().register(
+    _nameController.text, _emailController.text, _passwordController.text, _phoneController.text,
   );
-
   setState(() => _isLoading = false);
 
   if (!mounted) return;
 
   if (success) {
-    // ✅ SnackBar sukses
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Registrasi berhasil! Silakan cek email untuk OTP."),
-      ),
-    );
-
-    // ✅ LANGSUNG KE OTP (TANPA KE LOGIN DULU)
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Registrasi berhasil! Cek email.")));
+    // PINDAH KE OTP PAGE
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(
-        builder: (context) => OtpPage(email: _emailController.text),
-      ),
+      MaterialPageRoute(builder: (context) => OtpPage(email: _emailController.text)),
     );
-
   } else {
-    // ❌ Gagal register
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          "Register gagal. Cek data atau email sudah terdaftar.",
-        ),
-        backgroundColor: Colors.red,
-      ),
+      const SnackBar(content: Text("Register gagal. Email mungkin sudah ada."), backgroundColor: Colors.red),
     );
   }
 }
