@@ -518,9 +518,11 @@ class _CustomerHomePageState extends State<CustomerHomePage>
       onSelected: (value) async {
         switch (value) {
           case 'profile':
-            Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const ProfilePage()));
-            break;
+  Navigator.push(
+    context,
+    MaterialPageRoute(builder: (_) => const ProfilePage()),
+  ).then((_) => _fetchUserData()); // ← tambahkan .then ini
+  break;
           case 'settings':
             Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const SettingsPage()));
@@ -854,11 +856,15 @@ class _CustomerHomePageState extends State<CustomerHomePage>
         ).then((_) => setState(() => _selectedNavIndex = 0));
         break;
       case 3:
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const ProfilePage()),
-        ).then((_) => setState(() => _selectedNavIndex = 0));
-        break;
+  Navigator.push(
+    context,
+    MaterialPageRoute(builder: (_) => const ProfilePage()),
+  ).then((_) {
+    setState(() => _selectedNavIndex = 0);
+    _fetchUserData(); // ← tambahkan ini
+  });
+  break;
+
     }
   }
 }
