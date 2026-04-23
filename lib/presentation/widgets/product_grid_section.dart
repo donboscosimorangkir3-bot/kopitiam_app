@@ -146,7 +146,8 @@ class _ProductGridSectionState extends State<ProductGridSection> {
             crossAxisCount: 2,
             crossAxisSpacing: 14,
             mainAxisSpacing: 14,
-            childAspectRatio: 0.62,
+            // ── DINAIKKAN sedikit agar ruang deskripsi cukup ──
+            childAspectRatio: 0.54,
           ),
           itemCount: products.length,
           itemBuilder: (context, index) {
@@ -174,7 +175,7 @@ class _ProductGridSectionState extends State<ProductGridSection> {
         crossAxisCount: 2,
         crossAxisSpacing: 14,
         mainAxisSpacing: 14,
-        childAspectRatio: 0.62,
+        childAspectRatio: 0.54,
       ),
       itemCount: 6,
       itemBuilder: (_, __) => const _SkeletonCard(),
@@ -200,7 +201,9 @@ class _ProductGridSectionState extends State<ProductGridSection> {
               color: AppColors.primaryGreen.withOpacity(0.08),
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, size: 34, color: AppColors.primaryGreen.withOpacity(0.5)),
+            child: Icon(icon,
+                size: 34,
+                color: AppColors.primaryGreen.withOpacity(0.5)),
           ),
           const SizedBox(height: 16),
           Text(
@@ -332,7 +335,6 @@ class _ProductCardState extends State<_ProductCard>
   Widget _buildImage() {
     final url = widget.product.imageUrl;
 
-    // Jika URL null atau kosong → langsung tampil placeholder
     if (url == null || url.trim().isEmpty) {
       return _buildImagePlaceholder(showIcon: true);
     }
@@ -342,11 +344,8 @@ class _ProductCardState extends State<_ProductCard>
       fit: BoxFit.cover,
       width: double.infinity,
       height: double.infinity,
-      // Cache 7 hari — gambar tidak hilang saat scroll
       cacheKey: url,
-      // Placeholder saat pertama kali load
       placeholder: (context, _) => _buildImagePlaceholder(showIcon: false),
-      // Error: URL ada tapi gagal load (salah path, server down, dsb.)
       errorWidget: (context, _, __) => _buildImagePlaceholder(showIcon: true),
     );
   }
@@ -373,7 +372,6 @@ class _ProductCardState extends State<_ProductCard>
                 ),
               ],
             )
-          // Loading: shimmer halus
           : const _ShimmerBox(
               width: double.infinity,
               height: double.infinity,
@@ -388,6 +386,10 @@ class _ProductCardState extends State<_ProductCard>
   @override
   Widget build(BuildContext context) {
     final product = widget.product;
+
+    // Cek apakah deskripsi tersedia dan tidak kosong
+    final hasDescription =
+        product.description != null && product.description!.trim().isNotEmpty;
 
     return GestureDetector(
       onTapDown: (_) => _pressCtrl.forward(),
@@ -435,14 +437,13 @@ class _ProductCardState extends State<_ProductCard>
 
               // ── INFO PRODUK ──
               Expanded(
-                flex: 3,
+                flex: 4,
                 child: Padding(
-                  padding:
-                      const EdgeInsets.fromLTRB(10, 10, 10, 8),
+                  padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Nama produk
+                      // ── NAMA PRODUK ──
                       Text(
                         product.name,
                         style: GoogleFonts.poppins(
@@ -451,13 +452,35 @@ class _ProductCardState extends State<_ProductCard>
                           color: const Color(0xFF1A1A1A),
                           height: 1.3,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+
+                      const SizedBox(height: 4),
+
+                      // ── DESKRIPSI PRODUK (2 baris) ──
+                      // Tampil jika ada, placeholder abu jika tidak ada
+                      Text(
+                        hasDescription
+                            ? product.description!
+                            : "Tidak ada deskripsi",
+                        style: GoogleFonts.poppins(
+                          fontSize: 10.5,
+                          color: hasDescription
+                              ? Colors.grey.shade500
+                              : Colors.grey.shade300,
+                          height: 1.4,
+                          fontStyle: hasDescription
+                              ? FontStyle.normal
+                              : FontStyle.italic,
+                        ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
 
                       const Spacer(),
 
-                      // Harga
+                      // ── HARGA ──
                       Text(
                         product.priceCold != null
                             ? '${widget.formatPrice(product.price)}\n– ${widget.formatPrice(product.priceCold!)}'
@@ -472,7 +495,7 @@ class _ProductCardState extends State<_ProductCard>
                         overflow: TextOverflow.ellipsis,
                       ),
 
-                      // Tombol tambah ke keranjang
+                      // ── TOMBOL TAMBAH KE KERANJANG ──
                       if (widget.isLoggedIn) ...[
                         const SizedBox(height: 8),
                         Align(
@@ -486,14 +509,12 @@ class _ProductCardState extends State<_ProductCard>
                                 gradient: LinearGradient(
                                   colors: [
                                     AppColors.primaryGreen,
-                                    AppColors.primaryGreen
-                                        .withOpacity(0.82),
+                                    AppColors.primaryGreen.withOpacity(0.82),
                                   ],
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,
                                 ),
-                                borderRadius:
-                                    BorderRadius.circular(10),
+                                borderRadius: BorderRadius.circular(10),
                                 boxShadow: [
                                   BoxShadow(
                                     color: AppColors.primaryGreen
@@ -562,16 +583,24 @@ class _SkeletonCard extends StatelessWidget {
           ),
           // Teks skeleton
           Expanded(
-            flex: 3,
+            flex: 4,
             child: Padding(
               padding: const EdgeInsets.all(10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _ShimmerBox(width: double.infinity, height: 13, borderRadius: 6),
-                  const SizedBox(height: 6),
-                  _ShimmerBox(width: 100, height: 13, borderRadius: 6),
+                  // Nama
+                  _ShimmerBox(
+                      width: double.infinity, height: 13, borderRadius: 6),
+                  const SizedBox(height: 7),
+                  // Deskripsi baris 1
+                  _ShimmerBox(
+                      width: double.infinity, height: 10, borderRadius: 5),
+                  const SizedBox(height: 5),
+                  // Deskripsi baris 2
+                  _ShimmerBox(width: 110, height: 10, borderRadius: 5),
                   const Spacer(),
+                  // Harga
                   _ShimmerBox(width: 80, height: 12, borderRadius: 6),
                 ],
               ),

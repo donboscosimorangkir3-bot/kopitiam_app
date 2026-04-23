@@ -26,6 +26,7 @@ class CustomerHomePage extends StatefulWidget {
 
 class _CustomerHomePageState extends State<CustomerHomePage>
     with TickerProviderStateMixin {
+  // ── STATE ───────────────────────────────────────
   User? _currentUser;
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
@@ -35,32 +36,37 @@ class _CustomerHomePageState extends State<CustomerHomePage>
   int _selectedNavIndex = 0;
   double _scrollOffset = 0;
 
-  // Entry animations
+  // ── ANIMATIONS ──────────────────────────────────
   late AnimationController _entryController;
   late Animation<double> _headerFade;
   late Animation<Offset> _headerSlide;
   late Animation<double> _contentFade;
 
-  // Nav pop animation
   late AnimationController _navController;
   late Animation<double> _navScale;
 
+  // ─────────────────────────────────────────────────
+  // LIFECYCLE
+  // ─────────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
+    _initAnimations();
+    _scrollController.addListener(_onScroll);
+    _fetchUserData();
+  }
 
+  void _initAnimations() {
     _entryController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1000),
     );
-
     _headerFade = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _entryController,
         curve: const Interval(0.0, 0.55, curve: Curves.easeOut),
       ),
     );
-
     _headerSlide = Tween<Offset>(
       begin: const Offset(0, -0.10),
       end: Offset.zero,
@@ -68,27 +74,24 @@ class _CustomerHomePageState extends State<CustomerHomePage>
       parent: _entryController,
       curve: const Interval(0.0, 0.55, curve: Curves.easeOut),
     ));
-
     _contentFade = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _entryController,
         curve: const Interval(0.35, 1.0, curve: Curves.easeOut),
       ),
     );
-
     _navController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 400),
     );
-    _navScale = CurvedAnimation(parent: _navController, curve: Curves.elasticOut);
+    _navScale = CurvedAnimation(
+      parent: _navController,
+      curve: Curves.elasticOut,
+    );
+  }
 
-    _scrollController.addListener(() {
-      if (mounted) {
-        setState(() => _scrollOffset = _scrollController.offset);
-      }
-    });
-
-    _fetchUserData();
+  void _onScroll() {
+    if (mounted) setState(() => _scrollOffset = _scrollController.offset);
   }
 
   @override
@@ -100,6 +103,9 @@ class _CustomerHomePageState extends State<CustomerHomePage>
     super.dispose();
   }
 
+  // ─────────────────────────────────────────────────
+  // DATA
+  // ─────────────────────────────────────────────────
   Future<void> _fetchUserData() async {
     final user = await AuthRemoteDatasource().getUserInfo();
     if (!mounted) return;
@@ -108,6 +114,9 @@ class _CustomerHomePageState extends State<CustomerHomePage>
     _navController.forward();
   }
 
+  // ─────────────────────────────────────────────────
+  // HELPERS
+  // ─────────────────────────────────────────────────
   String _getGreeting() {
     final h = DateTime.now().hour;
     if (h < 11) return "Selamat Pagi";
@@ -124,9 +133,18 @@ class _CustomerHomePageState extends State<CustomerHomePage>
     return "🌙";
   }
 
-  // ═══════════════════════════════════════════════
+  Widget _circle(double size, double opacity) => Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.white.withOpacity(opacity),
+        ),
+      );
+
+  // ─────────────────────────────────────────────────
   // BUILD
-  // ═══════════════════════════════════════════════
+  // ─────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
@@ -138,111 +156,22 @@ class _CustomerHomePageState extends State<CustomerHomePage>
       backgroundColor: const Color(0xFFF5F0E8),
       extendBody: true,
       body: Stack(
-        children:[
+        children: [
+          // ── MAIN SCROLL CONTENT ──
           CustomScrollView(
             controller: _scrollController,
             physics: const BouncingScrollPhysics(),
-            slivers:[
+            slivers: [
               _buildSliverAppBar(),
               SliverToBoxAdapter(
                 child: FadeTransition(
                   opacity: _contentFade,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children:[
+                    children: [
                       const SizedBox(height: 24),
-
-                      // ── BANNER INFORMASI KAFE ──
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (context) => const CafeInfoScreen()),
-                            );
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors:[
-                                  AppColors.primaryGreen,
-                                  AppColors.primaryGreen.withOpacity(0.8),
-                                ],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow:[
-                                BoxShadow(
-                                  color: AppColors.primaryGreen.withOpacity(0.3),
-                                  blurRadius: 15,
-                                  offset: const Offset(0, 6),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              children:[
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children:[
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withOpacity(0.2),
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                        child: Text(
-                                          "Selamat Datang!",
-                                          style: GoogleFonts.poppins(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w600,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 12),
-                                      Text(
-                                        "Kenali Kami Lebih Dekat",
-                                        style: GoogleFonts.playfairDisplay(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        "Cek jam operasional & lokasi",
-                                        style: GoogleFonts.poppins(
-                                          fontSize: 12,
-                                          color: Colors.white.withOpacity(0.8),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Container(
-                                  width: 50,
-                                  height: 50,
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.15),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(Icons.storefront_rounded, 
-                                      color: Colors.white, size: 26),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      
-                      const SizedBox(height: 28), // Spasi antara Info Kafe dan Pengumuman
-
-
-                      // ── PENGUMUMAN & PROMO ──
+                      _buildCafeBanner(),
+                      const SizedBox(height: 28),
                       _buildSectionLabel(
                         icon: Icons.campaign_rounded,
                         title: "Promo & Pengumuman",
@@ -250,14 +179,9 @@ class _CustomerHomePageState extends State<CustomerHomePage>
                       ),
                       const SizedBox(height: 12),
                       const AnnouncementListWidget(),
-
                       const SizedBox(height: 28),
-
-                      // ── MENU SEPARATOR ──
                       _buildMenuSeparator(),
                       const SizedBox(height: 16),
-
-                      // ── PRODUK ──
                       ProductCategoryAndGridSection(
                         isLoggedIn: true,
                         selectedCategoryId: _selectedCategoryId,
@@ -270,7 +194,6 @@ class _CustomerHomePageState extends State<CustomerHomePage>
                           });
                         },
                       ),
-
                       // Ruang untuk floating nav
                       const SizedBox(height: 110),
                     ],
@@ -364,13 +287,12 @@ class _CustomerHomePageState extends State<CustomerHomePage>
       ),
       child: Stack(
         children: [
-          // Dekorasi lingkaran halus
+          // Dekorasi lingkaran
           Positioned(top: -40, right: -30, child: _circle(180, 0.06)),
           Positioned(top: 60, right: 80, child: _circle(60, 0.08)),
           Positioned(bottom: 10, left: -40, child: _circle(90, 0.05)),
           Positioned(bottom: -20, right: 20, child: _circle(55, 0.04)),
-
-          // Pattern dot kecil (dekoratif)
+          // Pattern dot
           Positioned(
             top: 30,
             left: 0,
@@ -383,8 +305,7 @@ class _CustomerHomePageState extends State<CustomerHomePage>
               ),
             ),
           ),
-
-          // Konten header
+          // Konten
           SafeArea(
             bottom: false,
             child: Padding(
@@ -392,53 +313,16 @@ class _CustomerHomePageState extends State<CustomerHomePage>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Baris atas: salam & aksi
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Text(
-                                  _getGreetingEmoji(),
-                                  style: const TextStyle(fontSize: 13),
-                                ),
-                                const SizedBox(width: 5),
-                                Text(
-                                  _getGreeting(),
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 12,
-                                    color: Colors.white.withOpacity(0.75),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              _currentUser?.name ?? 'Customer',
-                              style: GoogleFonts.playfairDisplay(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                                letterSpacing: 0.2,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      ),
+                      Expanded(child: _buildGreetingText()),
                       _buildNotifBtn(),
                       const SizedBox(width: 2),
                       _buildPopupMenu(),
                     ],
                   ),
-
                   const SizedBox(height: 10),
-
-                  // Tagline
                   Text(
                     "Mau minum apa hari ini? ☕",
                     style: GoogleFonts.poppins(
@@ -446,10 +330,7 @@ class _CustomerHomePageState extends State<CustomerHomePage>
                       color: Colors.white.withOpacity(0.78),
                     ),
                   ),
-
                   const SizedBox(height: 14),
-
-                  // Search bar
                   _buildSearchBar(),
                 ],
               ),
@@ -460,47 +341,64 @@ class _CustomerHomePageState extends State<CustomerHomePage>
     );
   }
 
-  Widget _circle(double size, double opacity) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: Colors.white.withOpacity(opacity),
+  Widget _buildGreetingText() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(_getGreetingEmoji(), style: const TextStyle(fontSize: 13)),
+            const SizedBox(width: 5),
+            Text(
+              _getGreeting(),
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: Colors.white.withOpacity(0.75),
+              ),
+            ),
+          ],
         ),
-      );
+        const SizedBox(height: 3),
+        Text(
+          _currentUser?.name ?? 'Customer',
+          style: GoogleFonts.playfairDisplay(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+            letterSpacing: 0.2,
+          ),
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
 
-  // ── NOTIF ──
+  // ── NOTIFIKASI ──
   Widget _buildNotifBtn() {
     return Stack(
       children: [
         IconButton(
           icon: const Icon(Icons.notifications_none_rounded,
               color: Colors.white, size: 23),
-          onPressed: () {
-            // Navigasi ke Halaman Notifikasi
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const NotificationPage()),
-            );
-          },
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const NotificationPage()),
+          ),
         ),
-        // Indikator Titik Merah (Badge)
         Positioned(
           right: 10,
           top: 10,
           child: Container(
-            padding: const EdgeInsets.all(2),
+            width: 9,
+            height: 9,
             decoration: BoxDecoration(
-              color: Colors.redAccent, // Warna merah notif
+              color: Colors.redAccent,
               shape: BoxShape.circle,
-              border: Border.all(color: AppColors.primaryGreen, width: 1.5), // Frame agar menyatu dengan header
-            ),
-            constraints: const BoxConstraints(
-              minWidth: 9,
-              minHeight: 9,
+              border:
+                  Border.all(color: AppColors.primaryGreen, width: 1.5),
             ),
           ),
-        )
+        ),
       ],
     );
   }
@@ -510,7 +408,8 @@ class _CustomerHomePageState extends State<CustomerHomePage>
   // ═══════════════════════════════════════════════
   Widget _buildPopupMenu() {
     return PopupMenuButton<String>(
-      icon: const Icon(Icons.more_vert_rounded, color: Colors.white, size: 23),
+      icon:
+          const Icon(Icons.more_vert_rounded, color: Colors.white, size: 23),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       elevation: 8,
       color: Colors.white,
@@ -518,18 +417,19 @@ class _CustomerHomePageState extends State<CustomerHomePage>
       onSelected: (value) async {
         switch (value) {
           case 'profile':
-  Navigator.push(
-    context,
-    MaterialPageRoute(builder: (_) => const ProfilePage()),
-  ).then((_) => _fetchUserData()); // ← tambahkan .then ini
-  break;
+            Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const ProfilePage()))
+                .then((_) => _fetchUserData());
+            break;
           case 'settings':
             Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const SettingsPage()));
             break;
           case 'help':
-            Navigator.push(
-                context, MaterialPageRoute(builder: (_) => const HelpPage()));
+            Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const HelpPage()));
             break;
           case 'logout':
             await AuthRemoteDatasource().logout();
@@ -547,10 +447,11 @@ class _CustomerHomePageState extends State<CustomerHomePage>
             const Color(0xFF1A1A1A)),
         _popItem('settings', Icons.settings_outlined, 'Pengaturan',
             const Color(0xFF1A1A1A)),
-        _popItem(
-            'help', Icons.help_outline_rounded, 'Bantuan', const Color(0xFF1A1A1A)),
+        _popItem('help', Icons.help_outline_rounded, 'Bantuan',
+            const Color(0xFF1A1A1A)),
         const PopupMenuDivider(height: 1),
-        _popItem('logout', Icons.logout_rounded, 'Keluar', Colors.red.shade600),
+        _popItem(
+            'logout', Icons.logout_rounded, 'Keluar', Colors.red.shade600),
       ],
     );
   }
@@ -642,6 +543,109 @@ class _CustomerHomePageState extends State<CustomerHomePage>
   }
 
   // ═══════════════════════════════════════════════
+  // CAFE BANNER
+  // ═══════════════════════════════════════════════
+  Widget _buildCafeBanner() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: GestureDetector(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const CafeInfoScreen()),
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                AppColors.primaryGreen,
+                AppColors.primaryGreen.withOpacity(0.8),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primaryGreen.withOpacity(0.3),
+                blurRadius: 15,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        "Selamat Datang!",
+                        style: GoogleFonts.poppins(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      "Kenali Kami Lebih Dekat",
+                      style: GoogleFonts.playfairDisplay(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      "Cek jam operasional & lokasi",
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: Colors.white.withOpacity(0.8),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                children: [
+                  Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.storefront_rounded,
+                        color: Colors.white, size: 26),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    "Lihat Info",
+                    style: GoogleFonts.poppins(
+                      fontSize: 10,
+                      color: Colors.white.withOpacity(0.85),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════
   // SECTION LABEL
   // ═══════════════════════════════════════════════
   Widget _buildSectionLabel({
@@ -695,7 +699,9 @@ class _CustomerHomePageState extends State<CustomerHomePage>
     );
   }
 
-  // ── MENU SEPARATOR ──
+  // ─────────────────────────────────────────────────
+  // MENU SEPARATOR
+  // ─────────────────────────────────────────────────
   Widget _buildMenuSeparator() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -703,7 +709,8 @@ class _CustomerHomePageState extends State<CustomerHomePage>
         children: [
           Expanded(
             child: Divider(
-                color: AppColors.primaryGreen.withOpacity(0.20), thickness: 1),
+                color: AppColors.primaryGreen.withOpacity(0.20),
+                thickness: 1),
           ),
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 12),
@@ -735,7 +742,8 @@ class _CustomerHomePageState extends State<CustomerHomePage>
           ),
           Expanded(
             child: Divider(
-                color: AppColors.primaryGreen.withOpacity(0.20), thickness: 1),
+                color: AppColors.primaryGreen.withOpacity(0.20),
+                thickness: 1),
           ),
         ],
       ),
@@ -813,19 +821,17 @@ class _CustomerHomePageState extends State<CustomerHomePage>
                     duration: const Duration(milliseconds: 280),
                     curve: Curves.easeOutCubic,
                     child: active
-                        ? Row(
-                            children: [
-                              const SizedBox(width: 7),
-                              Text(
-                                items[i].label,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
+                        ? Row(children: [
+                            const SizedBox(width: 7),
+                            Text(
+                              items[i].label,
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
                               ),
-                            ],
-                          )
+                            ),
+                          ])
                         : const SizedBox.shrink(),
                   ),
                 ],
@@ -856,15 +862,14 @@ class _CustomerHomePageState extends State<CustomerHomePage>
         ).then((_) => setState(() => _selectedNavIndex = 0));
         break;
       case 3:
-  Navigator.push(
-    context,
-    MaterialPageRoute(builder: (_) => const ProfilePage()),
-  ).then((_) {
-    setState(() => _selectedNavIndex = 0);
-    _fetchUserData(); // ← tambahkan ini
-  });
-  break;
-
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const ProfilePage()),
+        ).then((_) {
+          setState(() => _selectedNavIndex = 0);
+          _fetchUserData();
+        });
+        break;
     }
   }
 }

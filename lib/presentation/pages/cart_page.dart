@@ -421,144 +421,230 @@ class _CartPageState extends State<CartPage> with SingleTickerProviderStateMixin
   }
 
   // ─────────────────────────────────────────────────
-  // CART ITEM CARD
-  // ─────────────────────────────────────────────────
-  Widget _buildCartItemCard(CartItem item, int index) {
-    final imageUrl =
-        item.product.imageUrl != null && item.product.imageUrl!.startsWith('http')
-            ? item.product.imageUrl!
-            : (item.product.imageUrl != null && item.product.imageUrl!.isNotEmpty
-                ? '${ApiConstants.baseUrl}${item.product.imageUrl!}'
-                : 'https://via.placeholder.com/80/4CAF50/FFFFFF?text=Kopi');
+// CART ITEM CARD
+// ─────────────────────────────────────────────────
+Widget _buildCartItemCard(CartItem item, int index) {
+  // ✅ PERBAIKAN: Helper sederhana & jelas untuk resolving URL gambar
+  String _resolveImageUrl(String? rawUrl) {
+    if (rawUrl == null || rawUrl.trim().isEmpty) return '';
+    if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+      return rawUrl; // Sudah URL lengkap
+    }
+    // Path relatif dari backend (contoh: /storage/products/abc.jpg)
+    final base = ApiConstants.baseUrl.endsWith('/')
+        ? ApiConstants.baseUrl.substring(0, ApiConstants.baseUrl.length - 1)
+        : ApiConstants.baseUrl;
+    final path = rawUrl.startsWith('/') ? rawUrl : '/$rawUrl';
+    return '$base$path';
+  }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
+  final imageUrl = _resolveImageUrl(item.product.imageUrl);
+
+  return Container(
+    margin: const EdgeInsets.only(bottom: 12),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.05),
+          blurRadius: 14,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    ),
+    child: Padding(
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        children: [
+          // ── GAMBAR ──
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: imageUrl.isNotEmpty
+                ? Image.network(
+                    imageUrl,
+                    width: 76,
+                    height: 76,
+                    fit: BoxFit.cover,
+                    // ✅ Tampilkan loading shimmer saat gambar sedang dimuat
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return Container(
+                        width: 76,
+                        height: 76,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.primaryGreen.withOpacity(0.4),
+                            value: loadingProgress.expectedTotalBytes != null
+                                ? loadingProgress.cumulativeBytesLoaded /
+                                    loadingProgress.expectedTotalBytes!
+                                : null,
+                          ),
+                        ),
+                      );
+                    },
+                    // ✅ Fallback jika URL gagal dimuat
+                    errorBuilder: (_, __, ___) => _buildImagePlaceholder(),
+                  )
+                // ✅ Fallback jika URL kosong/null (Nasi Goreng, Kopi Susu, dll)
+                : _buildImagePlaceholder(),
+          ),
+
+          const SizedBox(width: 12),
+
+          // ── INFO PRODUK ──
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Nama produk
+                Text(
+                  item.product.name,
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF1A1A1A),
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+
+                // ✅ Label Hot/Cold jika ada
+                if (item.temperature != null && item.temperature!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2, bottom: 2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          item.temperature == 'hot'
+                              ? Icons.local_fire_department_rounded
+                              : Icons.ac_unit_rounded,
+                          size: 12,
+                          color: item.temperature == 'hot'
+                              ? Colors.orange.shade600
+                              : Colors.blue.shade400,
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          item.temperature == 'hot' ? 'Panas' : 'Dingin',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: item.temperature == 'hot'
+                                ? Colors.orange.shade600
+                                : Colors.blue.shade400,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                // Harga
+                Text(
+                  _formatPrice(item.product.price.toDouble()),
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primaryGreen,
+                  ),
+                ),
+
+                const SizedBox(height: 8),
+
+                // ── KONTROL QTY + HAPUS ──
+                Row(
+                  children: [
+                    // Tombol minus
+                    _buildQtyBtn(
+                      icon: Icons.remove_rounded,
+                      onTap: () => _updateQuantity(item, item.quantity - 1),
+                      enabled: item.quantity > 1,
+                      isDestructive: false,
+                    ),
+                    const SizedBox(width: 8),
+                    // Angka qty
+                    Container(
+                      width: 36,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF7F2EA),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: AppColors.primaryGreen.withOpacity(0.35),
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          item.quantity.toString(),
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF1A1A1A),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Tombol plus
+                    _buildQtyBtn(
+                      icon: Icons.add_rounded,
+                      onTap: () => _updateQuantity(item, item.quantity + 1),
+                      enabled: item.quantity < item.product.stock,
+                      isDestructive: false,
+                    ),
+
+                    const Spacer(),
+
+                    // Tombol hapus
+                    GestureDetector(
+                      onTap: () => _removeItem(item),
+                      child: Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.delete_outline_rounded,
+                          color: Colors.redAccent,
+                          size: 18,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            // ── GAMBAR ──
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.network(
-                imageUrl,
-                width: 76,
-                height: 76,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
-                  width: 76,
-                  height: 76,
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryGreen.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(Icons.coffee_rounded,
-                      size: 32, color: AppColors.primaryGreen.withOpacity(0.5)),
-                ),
-              ),
-            ),
-
-            const SizedBox(width: 12),
-
-            // ── INFO PRODUK ──
-            Expanded(
-              child: Column(
-  crossAxisAlignment: CrossAxisAlignment.start,
-  children: [
-    Text(item.product.name, style: TextStyle(fontWeight: FontWeight.bold)),
-    
-    // TAMBAHKAN LABEL INI:
-    if (item.temperature != null)
-      Text(
-        item.temperature == 'hot' ? '☕ Panas' : '🧊 Dingin',
-        style: TextStyle(
-          fontSize: 12,
-          color: item.temperature == 'hot' ? Colors.orange : Colors.blue,
     ),
-  ),
+  );
+}
 
-                  // ── KONTROL QTY + HAPUS ──
-                  Row(
-                    children: [
-                      // Tombol minus
-                      _buildQtyBtn(
-                        icon: Icons.remove_rounded,
-                        onTap: () => _updateQuantity(item, item.quantity - 1),
-                        enabled: item.quantity > 1,
-                        isDestructive: false,
-                      ),
-                      const SizedBox(width: 8),
-                      // Angka qty
-                      Container(
-                        width: 36,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF7F2EA),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: AppColors.primaryGreen.withOpacity(0.35),
-                          ),
-                        ),
-                        child: Center(
-                          child: Text(
-                            item.quantity.toString(),
-                            style: GoogleFonts.poppins(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF1A1A1A),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // Tombol plus
-                      _buildQtyBtn(
-                        icon: Icons.add_rounded,
-                        onTap: () => _updateQuantity(item, item.quantity + 1),
-                        enabled: item.quantity < item.product.stock,
-                        isDestructive: false,
-                      ),
-
-                      const Spacer(),
-
-                      // Tombol hapus
-                      GestureDetector(
-                        onTap: () => _removeItem(item),
-                        child: Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            color: Colors.red.withOpacity(0.08),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(
-                            Icons.delete_outline_rounded,
-                            color: Colors.redAccent,
-                            size: 18,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+// ✅ Pisahkan widget placeholder agar reusable & bersih
+Widget _buildImagePlaceholder() {
+  return Container(
+    width: 76,
+    height: 76,
+    decoration: BoxDecoration(
+      color: AppColors.primaryGreen.withOpacity(0.08),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Icon(
+      Icons.coffee_rounded,
+      size: 32,
+      color: AppColors.primaryGreen.withOpacity(0.4),
+    ),
+  );
+}
 
   // ─────────────────────────────────────────────────
   // BOTTOM BAR
