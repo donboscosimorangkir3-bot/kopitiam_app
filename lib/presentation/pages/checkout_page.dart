@@ -216,8 +216,8 @@ class _CheckoutPageState extends State<CheckoutPage>
               const SizedBox(height: 8),
               Text(
                 _orderType == 'dine-in'
-                    ? "Pesananmu sedang disiapkan.\nSilakan tunggu di Meja $_selectedTableNumber."
-                    : "Pesananmu sedang disiapkan.\nSilakan ambil di Kopitiam33.",
+                    ? "Silahkan lakukan pembayaran di kasir.\nLalu silakan tunggu di Meja $_selectedTableNumber."
+                    : "Silahkan lakukan pembayaran di kasir.\nSilakan ambil di meja Kasir.",
                 textAlign: TextAlign.center,
                 style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey.shade500, height: 1.6),
               ),

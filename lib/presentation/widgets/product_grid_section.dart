@@ -86,25 +86,17 @@ class _ProductGridSectionState extends State<ProductGridSection> {
     }
   }
 
-  // ─────────────────────────────────────────────
-  // BUILD UTAMA
-  // ─────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<Product>>(
       future: _productsFuture,
       builder: (context, snapshot) {
-        // ── LOADING ──
         if (snapshot.connectionState == ConnectionState.waiting) {
           return _buildSkeletonGrid();
         }
-
-        // ── ERROR ──
         if (snapshot.hasError) {
           return _buildErrorState(snapshot.error.toString());
         }
-
-        // ── KOSONG ──
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return _buildEmptyState(
             icon: Icons.coffee_outlined,
@@ -113,19 +105,15 @@ class _ProductGridSectionState extends State<ProductGridSection> {
           );
         }
 
-        // ── FILTER ──
         final products = snapshot.data!.where((p) {
           final categoryMatch = widget.filterCategoryId == null ||
               p.category_id == widget.filterCategoryId;
           final searchMatch = widget.searchQuery == null ||
               widget.searchQuery!.isEmpty ||
-              p.name
-                  .toLowerCase()
-                  .contains(widget.searchQuery!.toLowerCase());
+              p.name.toLowerCase().contains(widget.searchQuery!.toLowerCase());
           return categoryMatch && searchMatch;
         }).toList();
 
-        // ── HASIL FILTER KOSONG ──
         if (products.isEmpty) {
           return _buildEmptyState(
             icon: Icons.search_off_rounded,
@@ -136,7 +124,6 @@ class _ProductGridSectionState extends State<ProductGridSection> {
           );
         }
 
-        // ── GRID ──
         return GridView.builder(
           key: ValueKey('${widget.filterCategoryId}-${widget.searchQuery}'),
           shrinkWrap: true,
@@ -146,8 +133,7 @@ class _ProductGridSectionState extends State<ProductGridSection> {
             crossAxisCount: 2,
             crossAxisSpacing: 14,
             mainAxisSpacing: 14,
-            // ── DINAIKKAN sedikit agar ruang deskripsi cukup ──
-            childAspectRatio: 0.54,
+            childAspectRatio: 0.62, // ── DINAIKKAN agar tidak overflow ──
           ),
           itemCount: products.length,
           itemBuilder: (context, index) {
@@ -163,9 +149,6 @@ class _ProductGridSectionState extends State<ProductGridSection> {
     );
   }
 
-  // ─────────────────────────────────────────────
-  // SKELETON GRID — shimmer saat loading
-  // ─────────────────────────────────────────────
   Widget _buildSkeletonGrid() {
     return GridView.builder(
       shrinkWrap: true,
@@ -175,16 +158,13 @@ class _ProductGridSectionState extends State<ProductGridSection> {
         crossAxisCount: 2,
         crossAxisSpacing: 14,
         mainAxisSpacing: 14,
-        childAspectRatio: 0.54,
+        childAspectRatio: 0.62,
       ),
       itemCount: 6,
       itemBuilder: (_, __) => const _SkeletonCard(),
     );
   }
 
-  // ─────────────────────────────────────────────
-  // EMPTY STATE
-  // ─────────────────────────────────────────────
   Widget _buildEmptyState({
     required IconData icon,
     required String title,
@@ -228,9 +208,6 @@ class _ProductGridSectionState extends State<ProductGridSection> {
     );
   }
 
-  // ─────────────────────────────────────────────
-  // ERROR STATE
-  // ─────────────────────────────────────────────
   Widget _buildErrorState(String error) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
@@ -267,10 +244,8 @@ class _ProductGridSectionState extends State<ProductGridSection> {
           TextButton.icon(
             onPressed: _fetchProducts,
             icon: const Icon(Icons.refresh_rounded, size: 16),
-            label: Text(
-              "Coba lagi",
-              style: GoogleFonts.poppins(fontSize: 13),
-            ),
+            label: Text("Coba lagi",
+                style: GoogleFonts.poppins(fontSize: 13)),
             style: TextButton.styleFrom(
               foregroundColor: AppColors.primaryGreen,
               backgroundColor: AppColors.primaryGreen.withOpacity(0.08),
@@ -287,7 +262,7 @@ class _ProductGridSectionState extends State<ProductGridSection> {
 }
 
 // ═══════════════════════════════════════════════
-// PRODUCT CARD — widget terpisah agar efisien
+// PRODUCT CARD
 // ═══════════════════════════════════════════════
 class _ProductCard extends StatefulWidget {
   final Product product;
@@ -329,16 +304,11 @@ class _ProductCardState extends State<_ProductCard>
     super.dispose();
   }
 
-  // ─────────────────────────────────────────────
-  // GAMBAR PRODUK — pakai CachedNetworkImage
-  // ─────────────────────────────────────────────
   Widget _buildImage() {
     final url = widget.product.imageUrl;
-
     if (url == null || url.trim().isEmpty) {
       return _buildImagePlaceholder(showIcon: true);
     }
-
     return CachedNetworkImage(
       imageUrl: url,
       fit: BoxFit.cover,
@@ -346,7 +316,8 @@ class _ProductCardState extends State<_ProductCard>
       height: double.infinity,
       cacheKey: url,
       placeholder: (context, _) => _buildImagePlaceholder(showIcon: false),
-      errorWidget: (context, _, __) => _buildImagePlaceholder(showIcon: true),
+      errorWidget: (context, _, __) =>
+          _buildImagePlaceholder(showIcon: true),
     );
   }
 
@@ -357,17 +328,14 @@ class _ProductCardState extends State<_ProductCard>
           ? Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.image_not_supported_outlined,
-                  size: 30,
-                  color: Colors.brown.withOpacity(0.22),
-                ),
-                const SizedBox(height: 6),
+                Icon(Icons.image_not_supported_outlined,
+                    size: 28, color: Colors.brown.withOpacity(0.22)),
+                const SizedBox(height: 5),
                 Text(
                   "Foto belum tersedia",
                   style: GoogleFonts.poppins(
-                    fontSize: 9.5,
-                    color: Colors.brown.withOpacity(0.30),
+                    fontSize: 9,
+                    color: Colors.brown.withOpacity(0.28),
                   ),
                 ),
               ],
@@ -380,16 +348,15 @@ class _ProductCardState extends State<_ProductCard>
     );
   }
 
-  // ─────────────────────────────────────────────
-  // BUILD KARTU
-  // ─────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final product = widget.product;
-
-    // Cek apakah deskripsi tersedia dan tidak kosong
     final hasDescription =
         product.description != null && product.description!.trim().isNotEmpty;
+
+    // ── FIX: Tampilkan HANYA harga asli (price), abaikan priceCold ──
+    // Jika ada priceCold, tampilkan label kecil "Mulai dari"
+    final hasCold = product.priceCold != null;
 
     return GestureDetector(
       onTapDown: (_) => _pressCtrl.forward(),
@@ -407,15 +374,15 @@ class _ProductCardState extends State<_ProductCard>
         child: Container(
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(18),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.07),
                 blurRadius: 14,
-                offset: const Offset(0, 4),
+                offset: const Offset(0, 5),
               ),
               BoxShadow(
-                color: Colors.black.withOpacity(0.04),
+                color: Colors.black.withOpacity(0.03),
                 blurRadius: 4,
                 offset: const Offset(0, 1),
               ),
@@ -429,9 +396,76 @@ class _ProductCardState extends State<_ProductCard>
                 flex: 5,
                 child: ClipRRect(
                   borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(16),
+                    top: Radius.circular(18),
                   ),
-                  child: _buildImage(),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      _buildImage(),
+
+                      // Badge "Panas & Dingin" jika ada priceCold
+                      if (hasCold)
+                        Positioned(
+                          top: 8,
+                          left: 8,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 7, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.55),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text('☕🧊',
+                                    style: TextStyle(fontSize: 9)),
+                                const SizedBox(width: 3),
+                                Text(
+                                  'Panas & Dingin',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 8.5,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                      // Badge stok habis
+                      if (product.stock == 0)
+                        Positioned.fill(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.45),
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(18),
+                              ),
+                            ),
+                            child: Center(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: Colors.redAccent,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  'Habis',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 11,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
 
@@ -439,18 +473,18 @@ class _ProductCardState extends State<_ProductCard>
               Expanded(
                 flex: 4,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+                  padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // ── NAMA PRODUK ──
+                      // ── NAMA ──
                       Text(
                         product.name,
                         style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w700,
                           fontSize: 13,
                           color: const Color(0xFF1A1A1A),
-                          height: 1.3,
+                          height: 1.2,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -458,81 +492,97 @@ class _ProductCardState extends State<_ProductCard>
 
                       const SizedBox(height: 4),
 
-                      // ── DESKRIPSI PRODUK (2 baris) ──
-                      // Tampil jika ada, placeholder abu jika tidak ada
-                      Text(
-                        hasDescription
-                            ? product.description!
-                            : "Tidak ada deskripsi",
-                        style: GoogleFonts.poppins(
-                          fontSize: 10.5,
-                          color: hasDescription
-                              ? Colors.grey.shade500
-                              : Colors.grey.shade300,
-                          height: 1.4,
-                          fontStyle: hasDescription
-                              ? FontStyle.normal
-                              : FontStyle.italic,
+                      // ── DESKRIPSI ──
+                      Expanded(
+                        child: Text(
+                          hasDescription
+                              ? product.description!
+                              : "Lihat detail untuk info lebih lanjut",
+                          style: GoogleFonts.poppins(
+                            fontSize: 10.5,
+                            color: hasDescription
+                                ? Colors.grey.shade500
+                                : Colors.grey.shade300,
+                            height: 1.4,
+                            fontStyle: hasDescription
+                                ? FontStyle.normal
+                                : FontStyle.italic,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
                       ),
 
-                      const Spacer(),
+                      const SizedBox(height: 6),
 
-                      // ── HARGA ──
-                      Text(
-                        product.priceCold != null
-                            ? '${widget.formatPrice(product.price)}\n– ${widget.formatPrice(product.priceCold!)}'
-                            : widget.formatPrice(product.price),
-                        style: GoogleFonts.poppins(
-                          color: AppColors.primaryGreen,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 11.5,
-                          height: 1.4,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-
-                      // ── TOMBOL TAMBAH KE KERANJANG ──
-                      if (widget.isLoggedIn) ...[
-                        const SizedBox(height: 8),
-                        Align(
-                          alignment: Alignment.bottomRight,
-                          child: GestureDetector(
-                            onTap: widget.onTap,
-                            child: Container(
-                              width: 34,
-                              height: 34,
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    AppColors.primaryGreen,
-                                    AppColors.primaryGreen.withOpacity(0.82),
-                                  ],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                borderRadius: BorderRadius.circular(10),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: AppColors.primaryGreen
-                                        .withOpacity(0.35),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 3),
+                      // ── HARGA — hanya satu harga (harga asli) ──
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // Label "Mulai dari" jika ada varian dingin
+                                if (hasCold)
+                                  Text(
+                                    'Mulai dari',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 9,
+                                      color: Colors.grey.shade400,
+                                    ),
                                   ),
-                                ],
-                              ),
-                              child: const Icon(
-                                Icons.add_rounded,
-                                size: 19,
-                                color: Colors.white,
-                              ),
+                                Text(
+                                  widget.formatPrice(product.price),
+                                  style: GoogleFonts.poppins(
+                                    color: AppColors.primaryGreen,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12.5,
+                                    height: 1.2,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
                             ),
                           ),
-                        ),
-                      ],
+
+                          // ── TOMBOL TAMBAH ──
+                          if (widget.isLoggedIn && product.stock > 0)
+                            GestureDetector(
+                              onTap: widget.onTap,
+                              child: Container(
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      AppColors.primaryGreen,
+                                      AppColors.primaryGreen.withOpacity(0.82),
+                                    ],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  borderRadius: BorderRadius.circular(10),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: AppColors.primaryGreen
+                                          .withOpacity(0.35),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 3),
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(
+                                  Icons.add_rounded,
+                                  size: 18,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -546,7 +596,7 @@ class _ProductCardState extends State<_ProductCard>
 }
 
 // ═══════════════════════════════════════════════
-// SKELETON CARD — placeholder saat loading grid
+// SKELETON CARD
 // ═══════════════════════════════════════════════
 class _SkeletonCard extends StatelessWidget {
   const _SkeletonCard();
@@ -556,7 +606,7 @@ class _SkeletonCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
@@ -568,12 +618,11 @@ class _SkeletonCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Gambar skeleton
           Expanded(
             flex: 5,
             child: ClipRRect(
               borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(16)),
+                  const BorderRadius.vertical(top: Radius.circular(18)),
               child: const _ShimmerBox(
                 width: double.infinity,
                 height: double.infinity,
@@ -581,7 +630,6 @@ class _SkeletonCard extends StatelessWidget {
               ),
             ),
           ),
-          // Teks skeleton
           Expanded(
             flex: 4,
             child: Padding(
@@ -589,19 +637,15 @@ class _SkeletonCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Nama
                   _ShimmerBox(
                       width: double.infinity, height: 13, borderRadius: 6),
                   const SizedBox(height: 7),
-                  // Deskripsi baris 1
                   _ShimmerBox(
                       width: double.infinity, height: 10, borderRadius: 5),
                   const SizedBox(height: 5),
-                  // Deskripsi baris 2
-                  _ShimmerBox(width: 110, height: 10, borderRadius: 5),
+                  _ShimmerBox(width: 100, height: 10, borderRadius: 5),
                   const Spacer(),
-                  // Harga
-                  _ShimmerBox(width: 80, height: 12, borderRadius: 6),
+                  _ShimmerBox(width: 75, height: 13, borderRadius: 6),
                 ],
               ),
             ),
@@ -613,7 +657,7 @@ class _SkeletonCard extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════
-// SHIMMER BOX — animasi skeleton
+// SHIMMER BOX
 // ═══════════════════════════════════════════════
 class _ShimmerBox extends StatefulWidget {
   final double width;
@@ -662,16 +706,10 @@ class _ShimmerBoxState extends State<_ShimmerBox>
           borderRadius: BorderRadius.circular(widget.borderRadius),
           gradient: LinearGradient(
             colors: [
-              Color.lerp(
-                const Color(0xFFEDE8DF),
-                const Color(0xFFF7F3EC),
-                _anim.value,
-              )!,
-              Color.lerp(
-                const Color(0xFFF7F3EC),
-                const Color(0xFFEDE8DF),
-                _anim.value,
-              )!,
+              Color.lerp(const Color(0xFFEDE8DF), const Color(0xFFF7F3EC),
+                  _anim.value)!,
+              Color.lerp(const Color(0xFFF7F3EC), const Color(0xFFEDE8DF),
+                  _anim.value)!,
             ],
           ),
         ),
