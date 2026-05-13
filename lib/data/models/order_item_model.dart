@@ -8,6 +8,7 @@ class OrderItem {
   final int productId;
   final String productName;
   final double price;
+  final String? temperature;
   final int quantity;
   final double subtotal;
   final Product? product;
@@ -18,6 +19,7 @@ class OrderItem {
     required this.productId,
     required this.productName,
     required this.price,
+    this.temperature,
     required this.quantity,
     required this.subtotal,
     this.product,
@@ -34,6 +36,7 @@ class OrderItem {
       price:       double.tryParse(json['price']?.toString() ?? '0') ?? 0.0,
       quantity:    json['quantity'] ?? 0,
       subtotal:    double.tryParse(json['subtotal']?.toString() ?? '0') ?? 0.0,
+      temperature: json['temperature'],
       product:     json['product'] != null
                       ? Product.fromJson(json['product'])
                       : null,

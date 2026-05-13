@@ -1,15 +1,32 @@
 // lib/presentation/pages/order_detail_page.dart
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:kopitiam_app/core/api_constants.dart';
 import 'package:kopitiam_app/core/app_colors.dart';
 import 'package:kopitiam_app/data/models/order_model.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-class OrderDetailPage extends StatelessWidget {
+class OrderDetailPage extends StatefulWidget {
   final Order order;
   const OrderDetailPage({super.key, required this.order});
+
+  @override
+  State<OrderDetailPage> createState() => _OrderDetailPageState();
+}
+
+class _OrderDetailPageState extends State<OrderDetailPage> {
+  late Order _order;
+  bool _isCancelling = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _order = widget.order;
+  }
 
   String _formatPrice(double price) => NumberFormat.currency(
       locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(price);
@@ -17,7 +34,6 @@ class OrderDetailPage extends StatelessWidget {
   String _formatDate(DateTime date) =>
       DateFormat('dd MMMM yyyy, HH:mm').format(date);
 
-  // ── Status helpers ──────────────────────────────
   Color _getStatusColor(String status) {
     switch (status) {
       case 'pending':    return Colors.orange.shade600;
@@ -66,7 +82,6 @@ class OrderDetailPage extends StatelessWidget {
     }
   }
 
-  // ── Progress steps ──────────────────────────────
   final List<String> _steps = const [
     'pending', 'paid', 'processing', 'completed'
   ];
@@ -75,6 +90,189 @@ class OrderDetailPage extends StatelessWidget {
     if (status == 'cancelled') return -1;
     final i = _steps.indexOf(status);
     return i < 0 ? 0 : i;
+  }
+
+  // ─────────────────────────────────────────────────
+  // CANCEL ORDER
+  // ─────────────────────────────────────────────────
+  Future<void> _cancelOrder() async {
+    final bool? confirm = await _showCancelDialog();
+    if (confirm != true) return;
+
+    setState(() => _isCancelling = true);
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token');
+
+      final dio = Dio();
+      final response = await dio.post(
+        '${ApiConstants.orders}/${_order.id}/cancel',
+        options: Options(headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        setState(() {
+          // Update status order secara lokal agar UI langsung berubah
+          _order = Order(
+            id: _order.id,
+            orderNumber: _order.orderNumber,
+            status: 'cancelled',
+            totalAmount: _order.totalAmount,
+            orderType: _order.orderType,
+            tableNumber: _order.tableNumber,
+            shippingAddress: _order.shippingAddress,
+            paymentMethod: _order.paymentMethod,
+            createdAt: _order.createdAt,
+            items: _order.items,
+          );
+        });
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_outline,
+                    color: Colors.white, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text("Pesanan berhasil dibatalkan.",
+                      style: GoogleFonts.poppins(fontSize: 13)),
+                ),
+              ],
+            ),
+            backgroundColor: AppColors.primaryGreen,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+          ),
+        );
+
+        // Kembali ke halaman sebelumnya dengan signal refresh
+        Navigator.pop(context, true);
+      }
+    } on DioException catch (e) {
+      if (!mounted) return;
+      final msg = e.response?.data['message'] ?? 'Gagal membatalkan pesanan.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline, color: Colors.white, size: 18),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(msg,
+                    style: GoogleFonts.poppins(fontSize: 13)),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isCancelling = false);
+    }
+  }
+
+  Future<bool?> _showCancelDialog() {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.cancel_outlined,
+                    color: Colors.redAccent, size: 32),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                "Batalkan Pesanan?",
+                style: GoogleFonts.playfairDisplay(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF1A1A1A),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                "Pesanan ${_order.orderNumber} akan dibatalkan dan stok akan dikembalikan. Tindakan ini tidak dapat diurungkan.",
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  color: Colors.grey.shade600,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        side: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      child: Text(
+                        "Tidak",
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.redAccent,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        elevation: 0,
+                      ),
+                      child: Text(
+                        "Ya, Batalkan",
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   // ═══════════════════════════════════════════════
@@ -87,8 +285,9 @@ class OrderDetailPage extends StatelessWidget {
       statusBarIconBrightness: Brightness.light,
     ));
 
-    final statusColor = _getStatusColor(order.status);
-    final isCancelled = order.status == 'cancelled';
+    final statusColor = _getStatusColor(_order.status);
+    final isCancelled = _order.status == 'cancelled';
+    final canCancel = _order.status == 'pending';
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F2EA),
@@ -102,31 +301,83 @@ class OrderDetailPage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ── STATUS BANNER ──
                   _buildStatusBanner(statusColor, isCancelled),
                   const SizedBox(height: 16),
 
-                  // ── PROGRESS TRACKER (jika tidak cancelled) ──
                   if (!isCancelled) ...[
                     _buildProgressTracker(),
                     const SizedBox(height: 16),
                   ],
 
-                  // ── INFO PESANAN ──
                   _buildOrderInfoCard(),
                   const SizedBox(height: 14),
 
-                  // ── RINGKASAN ITEM ──
                   _buildItemsCard(),
                   const SizedBox(height: 14),
 
-                  // ── TOTAL PEMBAYARAN ──
                   _buildTotalCard(),
+
+                  // ✅ TOMBOL BATALKAN — hanya muncul saat status pending
+                  if (canCancel) ...[
+                    const SizedBox(height: 20),
+                    _buildCancelButton(),
+                  ],
                 ],
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────
+  // CANCEL BUTTON
+  // ─────────────────────────────────────────────────
+  Widget _buildCancelButton() {
+    return GestureDetector(
+      onTap: _isCancelling ? null : _cancelOrder,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: double.infinity,
+        height: 52,
+        decoration: BoxDecoration(
+          color: _isCancelling
+              ? Colors.red.shade100
+              : Colors.red.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: Colors.redAccent.withOpacity(0.4),
+            width: 1.5,
+          ),
+        ),
+        child: Center(
+          child: _isCancelling
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.redAccent,
+                  ),
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.cancel_outlined,
+                        color: Colors.redAccent, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      "Batalkan Pesanan",
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.redAccent,
+                      ),
+                    ),
+                  ],
+                ),
+        ),
       ),
     );
   }
@@ -185,7 +436,7 @@ class OrderDetailPage extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          order.orderNumber,
+                          _order.orderNumber,
                           style: GoogleFonts.poppins(
                             fontSize: 11.5,
                             color: Colors.white.withOpacity(0.75),
@@ -212,9 +463,6 @@ class OrderDetailPage extends StatelessWidget {
         ),
       );
 
-  // ─────────────────────────────────────────────────
-  // STATUS BANNER
-  // ─────────────────────────────────────────────────
   Widget _buildStatusBanner(Color statusColor, bool isCancelled) {
     return Container(
       width: double.infinity,
@@ -222,10 +470,7 @@ class OrderDetailPage extends StatelessWidget {
       decoration: BoxDecoration(
         color: isCancelled ? Colors.red.shade50 : statusColor.withOpacity(0.08),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: statusColor.withOpacity(0.25),
-          width: 1.5,
-        ),
+        border: Border.all(color: statusColor.withOpacity(0.25), width: 1.5),
       ),
       child: Row(
         children: [
@@ -235,7 +480,7 @@ class OrderDetailPage extends StatelessWidget {
               color: statusColor.withOpacity(0.15),
               shape: BoxShape.circle,
             ),
-            child: Icon(_getStatusIcon(order.status),
+            child: Icon(_getStatusIcon(_order.status),
                 color: statusColor, size: 26),
           ),
           const SizedBox(width: 14),
@@ -244,7 +489,7 @@ class OrderDetailPage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _getStatusLabel(order.status),
+                  _getStatusLabel(_order.status),
                   style: GoogleFonts.playfairDisplay(
                     fontSize: 17,
                     fontWeight: FontWeight.bold,
@@ -253,7 +498,7 @@ class OrderDetailPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  _getStatusDescription(order.status),
+                  _getStatusDescription(_order.status),
                   style: GoogleFonts.poppins(
                     fontSize: 12,
                     color: Colors.grey.shade600,
@@ -268,9 +513,6 @@ class OrderDetailPage extends StatelessWidget {
     );
   }
 
-  // ─────────────────────────────────────────────────
-  // PROGRESS TRACKER
-  // ─────────────────────────────────────────────────
   Widget _buildProgressTracker() {
     final stepLabels = ['Menunggu', 'Dibayar', 'Diproses', 'Selesai'];
     final stepIcons = [
@@ -279,7 +521,7 @@ class OrderDetailPage extends StatelessWidget {
       Icons.coffee_rounded,
       Icons.task_alt_rounded,
     ];
-    final current = _currentStep(order.status);
+    final current = _currentStep(_order.status);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -306,7 +548,6 @@ class OrderDetailPage extends StatelessWidget {
             children: List.generate(_steps.length, (i) {
               final isDone = i <= current;
               final isActive = i == current;
-              final color = isDone ? AppColors.primaryGreen : Colors.grey.shade300;
               final isLast = i == _steps.length - 1;
 
               return Expanded(
@@ -314,7 +555,6 @@ class OrderDetailPage extends StatelessWidget {
                   children: [
                     Column(
                       children: [
-                        // Circle
                         AnimatedContainer(
                           duration: const Duration(milliseconds: 300),
                           width: 36, height: 36,
@@ -325,28 +565,24 @@ class OrderDetailPage extends StatelessWidget {
                             shape: BoxShape.circle,
                             border: isActive
                                 ? Border.all(
-                                    color: AppColors.primaryGreen
-                                        .withOpacity(0.4),
+                                    color: AppColors.primaryGreen.withOpacity(0.4),
                                     width: 3)
                                 : null,
                             boxShadow: isActive
                                 ? [
                                     BoxShadow(
-                                      color: AppColors.primaryGreen
-                                          .withOpacity(0.3),
+                                      color: AppColors.primaryGreen.withOpacity(0.3),
                                       blurRadius: 8,
                                       offset: const Offset(0, 2),
-                                    ),
+                                    )
                                   ]
                                 : null,
                           ),
-                          child: Icon(
-                            stepIcons[i],
-                            size: 16,
-                            color: isDone
-                                ? Colors.white
-                                : Colors.grey.shade400,
-                          ),
+                          child: Icon(stepIcons[i],
+                              size: 16,
+                              color: isDone
+                                  ? Colors.white
+                                  : Colors.grey.shade400),
                         ),
                         const SizedBox(height: 6),
                         Text(
@@ -364,13 +600,11 @@ class OrderDetailPage extends StatelessWidget {
                         ),
                       ],
                     ),
-                    // Connector line
                     if (!isLast)
                       Expanded(
                         child: Container(
                           height: 2,
-                          margin:
-                              const EdgeInsets.only(bottom: 20),
+                          margin: const EdgeInsets.only(bottom: 20),
                           decoration: BoxDecoration(
                             color: i < current
                                 ? AppColors.primaryGreen
@@ -389,9 +623,6 @@ class OrderDetailPage extends StatelessWidget {
     );
   }
 
-  // ─────────────────────────────────────────────────
-  // ORDER INFO CARD
-  // ─────────────────────────────────────────────────
   Widget _buildOrderInfoCard() {
     return Container(
       decoration: BoxDecoration(
@@ -410,7 +641,7 @@ class OrderDetailPage extends StatelessWidget {
             icon: Icons.tag_rounded,
             iconColor: Colors.blue.shade500,
             label: "Nomor Pesanan",
-            value: order.orderNumber,
+            value: _order.orderNumber,
             isFirst: true,
           ),
           _divider(),
@@ -418,7 +649,7 @@ class OrderDetailPage extends StatelessWidget {
             icon: Icons.schedule_rounded,
             iconColor: Colors.orange.shade500,
             label: "Tanggal Pesan",
-            value: _formatDate(order.createdAt),
+            value: _formatDate(_order.createdAt),
           ),
           _divider(),
           _infoRow(
@@ -441,9 +672,9 @@ class OrderDetailPage extends StatelessWidget {
             icon: Icons.payments_rounded,
             iconColor: Colors.purple.shade400,
             label: "Metode Pembayaran",
-            value: order.paymentMethod == 'cash_on_pickup'
+            value: _order.paymentMethod == 'cash_on_pickup'
                 ? "Bayar di Kafe"
-                : order.paymentMethod ?? "N/A",
+                : _order.paymentMethod ?? "N/A",
             isLast: true,
           ),
         ],
@@ -452,23 +683,22 @@ class OrderDetailPage extends StatelessWidget {
   }
 
   IconData _getOrderTypeIcon() {
-    if (order.orderType == 'dine-in') return Icons.restaurant_rounded;
+    if (_order.orderType == 'dine-in') return Icons.restaurant_rounded;
     return Icons.shopping_bag_rounded;
   }
 
   String _getOrderTypeLabel() {
-    if (order.orderType == 'dine-in') return 'Dine In (Makan di Tempat)';
+    if (_order.orderType == 'dine-in') return 'Dine In (Makan di Tempat)';
     return 'Pickup (Ambil di Kasir)';
   }
 
   String _getTableNumber() {
-    if (order.tableNumber != null && order.tableNumber!.isNotEmpty) {
-      return "Meja ${order.tableNumber}";
+    if (_order.tableNumber != null && _order.tableNumber!.isNotEmpty) {
+      return "Meja ${_order.tableNumber}";
     }
-    // Parse dari shipping_address jika ada
-    if (order.shippingAddress != null &&
-        order.shippingAddress!.startsWith('Dine In - Meja')) {
-      return order.shippingAddress!.replaceFirst('Dine In - ', '');
+    if (_order.shippingAddress != null &&
+        _order.shippingAddress!.startsWith('Dine In - Meja')) {
+      return _order.shippingAddress!.replaceFirst('Dine In - ', '');
     }
     return '';
   }
@@ -522,14 +752,14 @@ class OrderDetailPage extends StatelessWidget {
   }
 
   Widget _divider() => Divider(
-      height: 1, thickness: 1, color: Colors.grey.shade100,
-      indent: 16, endIndent: 16);
+      height: 1,
+      thickness: 1,
+      color: Colors.grey.shade100,
+      indent: 16,
+      endIndent: 16);
 
-  // ─────────────────────────────────────────────────
-  // ITEMS CARD
-  // ─────────────────────────────────────────────────
   Widget _buildItemsCard() {
-    final items = order.items ?? [];
+    final items = _order.items ?? [];
 
     return Container(
       decoration: BoxDecoration(
@@ -572,7 +802,6 @@ class OrderDetailPage extends StatelessWidget {
             ),
           ),
           Divider(height: 1, color: Colors.grey.shade100),
-
           if (items.isEmpty)
             Padding(
               padding: const EdgeInsets.all(16),
@@ -592,7 +821,6 @@ class OrderDetailPage extends StatelessWidget {
                         horizontal: 16, vertical: 12),
                     child: Row(
                       children: [
-                        // Foto produk
                         ClipRRect(
                           borderRadius: BorderRadius.circular(10),
                           child: item.product?.imageUrl != null &&
@@ -687,13 +915,9 @@ class OrderDetailPage extends StatelessWidget {
             size: 22, color: AppColors.primaryGreen.withOpacity(0.4)),
       );
 
-  // ─────────────────────────────────────────────────
-  // TOTAL CARD
-  // ─────────────────────────────────────────────────
   Widget _buildTotalCard() {
-    final items = order.items ?? [];
-    final subtotal =
-        items.fold(0.0, (s, i) => s + i.price * i.quantity);
+    final items = _order.items ?? [];
+    final subtotal = items.fold(0.0, (s, i) => s + i.price * i.quantity);
 
     return Container(
       decoration: BoxDecoration(
@@ -708,7 +932,6 @@ class OrderDetailPage extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // Subtotal
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
             child: Row(
@@ -725,15 +948,17 @@ class OrderDetailPage extends StatelessWidget {
               ],
             ),
           ),
-          Divider(height: 1, color: Colors.grey.shade100, indent: 16, endIndent: 16),
-
-          // Total utama
+          Divider(
+              height: 1,
+              color: Colors.grey.shade100,
+              indent: 16,
+              endIndent: 16),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
               color: AppColors.primaryGreen.withOpacity(0.06),
-              borderRadius: const BorderRadius.vertical(
-                  bottom: Radius.circular(18)),
+              borderRadius:
+                  const BorderRadius.vertical(bottom: Radius.circular(18)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -745,7 +970,7 @@ class OrderDetailPage extends StatelessWidget {
                       color: const Color(0xFF1A1A1A),
                     )),
                 Text(
-                  _formatPrice(order.totalAmount),
+                  _formatPrice(_order.totalAmount),
                   style: GoogleFonts.playfairDisplay(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,

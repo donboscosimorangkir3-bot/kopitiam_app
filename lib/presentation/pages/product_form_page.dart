@@ -110,11 +110,11 @@ class _ProductFormPageState extends State<ProductFormPage> {
         };
 
         // Jika ada gambar baru yang dipilih, tambahkan ke data
-        if (_imageFile != null) {
-          data['image'] = await MultipartFile.fromFile(_imageFile!.path, filename: _imageFile!.path.split('/').last);
-        } else if (_isEditing && _currentImageUrl == null) {
-          // Jika mode edit dan gambar sebelumnya sudah dihapus, kirim flag ke backend
-          data['clear_image'] = 'true';
+                if (_imageFile != null) {
+          data['image'] = await MultipartFile.fromFile(
+            _imageFile!.path,
+            filename: _imageFile!.path.split('/').last,
+          );
         }
 
 
@@ -301,25 +301,29 @@ class _ProductFormPageState extends State<ProductFormPage> {
                           ? ClipRRect(
                               borderRadius: BorderRadius.circular(12),
                               child: Image.network(
-                                _currentImageUrl!, 
-                                fit: BoxFit.cover, 
-                                // Tambahkan cache-busting parameter untuk memastikan gambar terbaru terload
-                                key: ValueKey(_currentImageUrl!), // Ini penting untuk memaksa refresh Image.network
-                                loadingBuilder: (BuildContext context, Widget child, ImageChunkEvent? loadingProgress) {
-                                  if (loadingProgress == null) {
-                                    return child;
-                                  }
-                                  return Center(
-                                    child: CircularProgressIndicator(
-                                      value: loadingProgress.expectedTotalBytes != null
-                                          ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
-                                          : null,
-                                      color: AppColors.primaryGreen,
-                                    ),
-                                  );
-                                },
-                                errorBuilder: (c, e, s) => _buildImagePlaceholder(), // Jika error, tampilkan placeholder
+                          // ✅ Cache busting: paksa load ulang gambar terbaru
+                          Uri.parse(_currentImageUrl!).replace(
+                            queryParameters: {
+                              ...Uri.parse(_currentImageUrl!).queryParameters,
+                              't': DateTime.now().millisecondsSinceEpoch.toString(),
+                            },
+                          ).toString(),
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return Center(
+                              child: CircularProgressIndicator(
+                                value: loadingProgress.expectedTotalBytes != null
+                                    ? loadingProgress.cumulativeBytesLoaded /
+                                        loadingProgress.expectedTotalBytes!
+                                    : null,
+                                color: AppColors.primaryGreen,
                               ),
+                            );
+                          },
+                          errorBuilder: (c, e, s) => _buildImagePlaceholder(),
+                        ),
+
                             )
                           : _buildImagePlaceholder()), // Placeholder jika tidak ada gambar sama sekali
                 ),

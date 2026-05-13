@@ -6,13 +6,10 @@
     <uses-permission android:name="android.permission.INTERNET"/>
 
     <!-- Permissions for file storage (for Android 9/API 28 and below) -->
-    <!-- These permissions are automatically granted for targetSdkVersion 28- -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
 
-    <!-- Permissions for Android 10 (API 29) and above: Scoped Storage changes.
-         MANAGE_EXTERNAL_STORAGE is for "All Files Access" (Android 11+/API 30+)
-         Only use if strictly necessary and be prepared for Play Store review. -->
+    <!-- Permissions for Android 10 (API 29) and above -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" /> 
 
     <application
@@ -20,6 +17,7 @@
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:requestLegacyExternalStorage="true"
+        android:usesCleartextTraffic="true"
         tools:targetApi="31"
         tools:node="merge">
 
@@ -40,6 +38,7 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

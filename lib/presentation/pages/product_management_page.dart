@@ -216,7 +216,29 @@ class _ProductManagementPageState extends State<ProductManagementPage>
       MaterialPageRoute(
           builder: (_) => ProductFormPage(product: product)),
     );
+    // ✅ Selalu fetch ulang setelah kembali dari form (add/edit)
+    // agar gambar terbaru tampil langsung tanpa perlu manual refresh
     _fetchProducts();
+  }
+
+  // ── Helper: bangun cacheKey yang menyertakan waktu update ──
+  // Jika produk punya updatedAt, cache akan invalid otomatis setelah edit
+  String _buildCacheKey(Product product) {
+    final version = product.updatedAt ?? product.id.toString();
+    return 'product_thumb_${product.id}_$version';
+  }
+
+  // ── Helper: bangun URL dengan cache-busting query param ──
+  String _buildImageUrl(Product product) {
+    final url = product.imageUrl!;
+    // Jika URL sudah punya query param, tambahkan &v=...
+    // Jika tidak, tambahkan ?v=...
+    final version = product.updatedAt?.replaceAll(RegExp(r'[^0-9]'), '') ??
+        product.id.toString();
+    if (url.contains('?')) {
+      return '$url&v=$version';
+    }
+    return '$url?v=$version';
   }
 
   // ═══════════════════════════════════════════════
@@ -255,7 +277,6 @@ class _ProductManagementPageState extends State<ProductManagementPage>
                               opacity: _fadeAnim,
                               child: Column(
                                 children: [
-                                  // Info bar
                                   Padding(
                                     padding: const EdgeInsets.fromLTRB(
                                         20, 10, 20, 4),
@@ -348,9 +369,6 @@ class _ProductManagementPageState extends State<ProductManagementPage>
     );
   }
 
-  // ─────────────────────────────────────────────────
-  // HEADER
-  // ─────────────────────────────────────────────────
   Widget _buildHeader() {
     return Container(
       decoration: BoxDecoration(
@@ -402,8 +420,7 @@ class _ProductManagementPageState extends State<ProductManagementPage>
                         Text("Kelola semua produk kopitiam33 di sini",
                             style: GoogleFonts.poppins(
                                 fontSize: 11,
-                                color:
-                                    Colors.white.withOpacity(0.7))),
+                                color: Colors.white.withOpacity(0.7))),
                       ],
                     ),
                   ),
@@ -425,9 +442,6 @@ class _ProductManagementPageState extends State<ProductManagementPage>
         ),
       );
 
-  // ─────────────────────────────────────────────────
-  // SEARCH BAR
-  // ─────────────────────────────────────────────────
   Widget _buildSearchBar() {
     return Container(
       color: Colors.white,
@@ -462,8 +476,8 @@ class _ProductManagementPageState extends State<ProductManagementPage>
               : null,
           filled: true,
           fillColor: const Color(0xFFF7F2EA),
-          contentPadding: const EdgeInsets.symmetric(
-              vertical: 10, horizontal: 16),
+          contentPadding:
+              const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
             borderSide: BorderSide.none,
@@ -473,11 +487,6 @@ class _ProductManagementPageState extends State<ProductManagementPage>
     );
   }
 
-  // ─────────────────────────────────────────────────
-  // PRODUCT CARD
-  // FIX: gunakan CachedNetworkImage agar gambar
-  // tidak hilang-hilang dan ter-cache dengan baik
-  // ─────────────────────────────────────────────────
   Widget _buildProductCard(Product product) {
     final isLowStock = product.stock <= 5;
     final hasVariant = product.priceCold != null;
@@ -503,7 +512,7 @@ class _ProductManagementPageState extends State<ProductManagementPage>
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── GAMBAR — CachedNetworkImage ──
+          // ── GAMBAR ──
           ClipRRect(
             borderRadius: const BorderRadius.only(
               topLeft: Radius.circular(20),
@@ -514,13 +523,12 @@ class _ProductManagementPageState extends State<ProductManagementPage>
               height: 110,
               child: hasImage
                   ? CachedNetworkImage(
-                      imageUrl: product.imageUrl!,
+                      // ✅ URL dengan cache-busting version dari updatedAt
+                      imageUrl: _buildImageUrl(product),
                       fit: BoxFit.cover,
-                      // Key unik per produk agar cache tidak bentrok
-                      cacheKey: 'product_thumb_${product.id}',
-                      // Shimmer saat loading
+                      // ✅ cacheKey menyertakan updatedAt agar cache invalid setelah edit
+                      cacheKey: _buildCacheKey(product),
                       placeholder: (_, __) => _buildImageShimmer(),
-                      // Fallback jika error
                       errorWidget: (_, __, ___) => _placeholderImage(),
                     )
                   : _placeholderImage(),
@@ -534,7 +542,6 @@ class _ProductManagementPageState extends State<ProductManagementPage>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Nama
                   Text(
                     product.name,
                     style: GoogleFonts.playfairDisplay(
@@ -544,10 +551,7 @@ class _ProductManagementPageState extends State<ProductManagementPage>
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-
                   const SizedBox(height: 5),
-
-                  // Harga
                   hasVariant
                       ? Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -568,10 +572,7 @@ class _ProductManagementPageState extends State<ProductManagementPage>
                               fontWeight: FontWeight.bold,
                               color: AppColors.primaryGreen),
                         ),
-
                   const SizedBox(height: 6),
-
-                  // Stok badge
                   Row(
                     children: [
                       Container(
@@ -651,18 +652,11 @@ class _ProductManagementPageState extends State<ProductManagementPage>
     );
   }
 
-  // Shimmer saat gambar sedang loading
   Widget _buildImageShimmer() {
     return Container(
       width: 90,
       height: 110,
-      decoration: BoxDecoration(
-        color: Colors.grey.shade200,
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(20),
-          bottomLeft: Radius.circular(20),
-        ),
-      ),
+      color: Colors.grey.shade200,
       child: Center(
         child: SizedBox(
           width: 20,
@@ -676,7 +670,6 @@ class _ProductManagementPageState extends State<ProductManagementPage>
     );
   }
 
-  // Placeholder jika tidak ada gambar / gambar error
   Widget _placeholderImage() {
     return Container(
       width: 90,
@@ -725,9 +718,6 @@ class _ProductManagementPageState extends State<ProductManagementPage>
     );
   }
 
-  // ─────────────────────────────────────────────────
-  // EMPTY & ERROR STATE
-  // ─────────────────────────────────────────────────
   Widget _buildEmptyState() {
     final isSearch = _searchQuery.isNotEmpty;
     return Center(

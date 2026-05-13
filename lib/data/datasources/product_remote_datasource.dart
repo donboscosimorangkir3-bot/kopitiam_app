@@ -24,24 +24,20 @@ class ProductRemoteDatasource {
     );
   }
 
-  // GET ALL PRODUCTS (Public & Admin)
+  // GET ALL PRODUCTS (Public)
   Future<List<Product>> getProducts() async {
     try {
       final response = await _dio.get(ApiConstants.products);
-
       if (response.statusCode == 200) {
         final List<dynamic> productList = response.data['data'];
         return productList.map((json) => Product.fromJson(json)).toList();
       }
       return [];
     } on DioException catch (e) {
-      print("Error fetching products from API: ${e.response?.data}");
-      if (e.response != null) {
-        print("Response data: ${e.response?.data}");
-      }
+      print("Error fetching products: ${e.response?.data}");
       return [];
     } catch (e) {
-      print("Unexpected error when getting products: $e");
+      print("Unexpected error: $e");
       return [];
     }
   }
@@ -53,7 +49,7 @@ class ProductRemoteDatasource {
       if (options.headers?['Authorization'] == 'Bearer null') return null;
 
       final response = await _dio.get(
-        '${ApiConstants.baseUrl}/admin/products/$id', // URL Admin
+        '${ApiConstants.baseUrl}/admin/products/$id',
         options: options,
       );
 
@@ -74,9 +70,9 @@ class ProductRemoteDatasource {
       if (options.headers?['Authorization'] == 'Bearer null') return false;
 
       final formData = FormData.fromMap(productData);
-      
+
       final response = await _dio.post(
-        ApiConstants.baseUrl + '/admin/products', // URL Admin
+        '${ApiConstants.baseUrl}/admin/products',
         data: formData,
         options: options,
       );
@@ -94,18 +90,49 @@ class ProductRemoteDatasource {
       final options = await _getAuthOptions();
       if (options.headers?['Authorization'] == 'Bearer null') return false;
 
-      // Dio akan otomatis mengirim sebagai multipart/form-data jika ada File
-      final formData = FormData.fromMap(productData);
+      // ✅ Pisahkan MultipartFile dari field biasa
+      MultipartFile? imageFile;
+      if (productData.containsKey('image') &&
+          productData['image'] is MultipartFile) {
+        imageFile = productData['image'] as MultipartFile;
+        productData.remove('image');
+      }
 
-      final response = await _dio.post( // Gunakan POST karena ada potensi kirim file
-        '${ApiConstants.baseUrl}/admin/products/$id', // URL Admin
+      // ✅ Bangun fields — semua nilai dikonversi ke String
+      // karena FormData hanya menerima String/MultipartFile
+      final Map<String, dynamic> fields = {};
+      productData.forEach((key, value) {
+        if (value != null) {
+          fields[key] = value.toString();
+        }
+        // null values tidak dikirim → backend akan pakai nullable
+      });
+
+      // ✅ TIDAK ada _method karena route sudah POST
+      final formData = FormData.fromMap(fields);
+
+      // ✅ Tambahkan file gambar jika ada
+      if (imageFile != null) {
+        formData.files.add(MapEntry('image', imageFile));
+      }
+
+      print("=== UPDATE PRODUCT $id ===");
+      print("Fields: $fields");
+      print("Has image: ${imageFile != null}");
+
+      final response = await _dio.post(
+        '${ApiConstants.baseUrl}/admin/products/$id',
         data: formData,
         options: options,
       );
 
+      print("Response status: ${response.statusCode}");
+      print("Response data: ${response.data}");
+
       return response.statusCode == 200;
     } on DioException catch (e) {
-      print("Error updating product: ${e.response?.data}");
+      print("Error updating product: ${e.response?.statusCode}");
+      print("Error data: ${e.response?.data}");
       return false;
     }
   }
@@ -117,7 +144,7 @@ class ProductRemoteDatasource {
       if (options.headers?['Authorization'] == 'Bearer null') return false;
 
       final response = await _dio.delete(
-        '${ApiConstants.baseUrl}/admin/products/$id', // URL Admin
+        '${ApiConstants.baseUrl}/admin/products/$id',
         options: options,
       );
 

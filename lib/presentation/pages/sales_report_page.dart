@@ -2,18 +2,17 @@
 
 import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:excel/excel.dart' hide Border;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:kopitiam_app/core/app_colors.dart';
-import 'package:kopitiam_app/data/datasources/order_remote_datasource.dart';
 import 'package:kopitiam_app/data/models/order_model.dart';
 import 'package:kopitiam_app/data/datasources/report_remote_datasource.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:dio/dio.dart';
 import 'package:kopitiam_app/core/api_constants.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -58,27 +57,30 @@ class _SalesReportPageState extends State<SalesReportPage>
   }
 
   Future<void> _fetchSalesOrders() async {
-  setState(() { _isLoading = true; _hasError = false; });
-  try {
-    final result = await ReportRemoteDatasource().getDetailedSales(
-      startDate: _selectedStartDate,
-      endDate: _selectedEndDate,
-    );
-    
-    if (!mounted) return;
-    
-    // Pastikan result tidak null sebelum assign
-    setState(() { 
-      _orders = result ?? []; 
-      _isLoading = false; 
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
     });
-    _animController.forward(from: 0);
-  } catch (e) {
-    debugPrint("Error fetching detailed sales report: $e"); // Ini akan tampilkan error aslinya
-    if (!mounted) return;
-    setState(() { _isLoading = false; _hasError = true; });
+    try {
+      final result = await ReportRemoteDatasource().getDetailedSales(
+        startDate: _selectedStartDate,
+        endDate: _selectedEndDate,
+      );
+      if (!mounted) return;
+      setState(() {
+        _orders = result ?? [];
+        _isLoading = false;
+      });
+      _animController.forward(from: 0);
+    } catch (e) {
+      debugPrint("Error fetching detailed sales report: $e");
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _hasError = true;
+      });
+    }
   }
-}
 
   String _formatPrice(double price) => NumberFormat.currency(
       locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(price);
@@ -170,145 +172,247 @@ class _SalesReportPageState extends State<SalesReportPage>
   }
 
   // =================================================================
-  // == PERBAIKAN: Fungsi untuk membuat konten CSV
-  // =================================================================
-  String _generateCsvContent(
-  List<Order> orders, {
-  required DateTime startDate,
-  required DateTime endDate,
-  required double totalRevenue,
-  required int completedCount,
-  required int cancelledCount,
-  required double avgOrderValue,
-}) {
-  List<List<String>> rows = [];
-  String formatCurrencyValue(double value) => value.toInt().toString();
-
-  // 1. Header & Ringkasan
-  rows.add(['Laporan Penjualan Kopitiam33']);
-  rows.add(['Periode:', '${DateFormat('dd MMM yyyy').format(startDate)} - ${DateFormat('dd MMM yyyy').format(endDate)}']);
-  rows.add([]);
-  rows.add(['Total Pendapatan:', formatCurrencyValue(totalRevenue)]);
-  rows.add(['Total Pesanan:', orders.length.toString()]);
-  rows.add(['Selesai:', completedCount.toString()]);
-  rows.add(['Dibatalkan:', cancelledCount.toString()]);
-  rows.add(['Rata-rata Per Pesanan:', formatCurrencyValue(avgOrderValue)]);
-  rows.add([]); 
-
-  // 2. Header Tabel
-  List<String> header = [
-    "No", "ID Pesanan", "Nomor Pesanan", "Pelanggan", "Email", 
-    "Tipe", "Meja", "Total (Rp)", "Status", "Metode", "Tanggal", "Item"
-  ];
-  rows.add(header);
-
-  // 3. Baris Data
-  for (var i = 0; i < orders.length; i++) {
-    final order = orders[i];
-    final itemsDetail = order.items?.map((it) => '${it.quantity}x ${it.productName}').join(' | ') ?? '-';
-    rows.add([
-      (i + 1).toString(),
-      order.id.toString(),
-      order.orderNumber,
-      order.user?.name ?? 'N/A',
-      order.user?.email ?? 'N/A',
-      order.orderType ?? '-',
-      order.tableNumber?.toString() ?? '-',
-      formatCurrencyValue(order.totalAmount),
-      _getStatusLabel(order.status),
-      order.paymentMethod ?? 'N/A',
-      DateFormat('dd/MM/yyyy HH:mm').format(order.createdAt),
-      itemsDetail,
-    ]);
-  }
-
-  // 4. Baris Total (Aman: pastikan ada data sebelum akses indeks)
-  if (orders.isNotEmpty) {
-    List<String> totalRow = List.filled(header.length, '');
-    totalRow[6] = 'TOTAL'; 
-    totalRow[7] = formatCurrencyValue(totalRevenue);
-    rows.add(totalRow);
-  }
-
-  return rows.map((row) => row.map((c) => '"${c.replaceAll('"', '""')}"').join(';')).join('\n');
-}
-
-
-  // =================================================================
-  // == PERBAIKAN: Fungsi ekspor laporan CSV/Excel
+  // EKSPOR EXCEL — menggunakan package excel
   // =================================================================
   Future<void> _exportReport() async {
-  if (_isExporting) return;
-  setState(() => _isExporting = true);
-  _showSnackBar("Menyiapkan ekspor laporan Excel/CSV...",
-      icon: Icons.hourglass_top_rounded);
+    if (_isExporting) return;
+    setState(() => _isExporting = true);
+    _showSnackBar("Menyiapkan ekspor laporan Excel...",
+        icon: Icons.hourglass_top_rounded);
 
-  // ── Cek izin penyimpanan ──
-  bool permissionGranted = false;
-  if (Platform.isAndroid) {
-    final androidInfo = await DeviceInfoPlugin().androidInfo;
-    if (androidInfo.version.sdkInt >= 33) {
-      permissionGranted = true; // No permission needed for Android 13+
-    } else {
-      var status = await Permission.storage.request();
-      if (status.isPermanentlyDenied) {
-        if (!mounted) return;
-        setState(() => _isExporting = false);
-        _showPermissionDialog();
-        return;
+    // ── Cek izin penyimpanan ──
+    bool permissionGranted = false;
+    if (Platform.isAndroid) {
+      final androidInfo = await DeviceInfoPlugin().androidInfo;
+      if (androidInfo.version.sdkInt >= 33) {
+        permissionGranted = true;
+      } else {
+        var status = await Permission.storage.request();
+        if (status.isPermanentlyDenied) {
+          if (!mounted) return;
+          setState(() => _isExporting = false);
+          _showPermissionDialog();
+          return;
+        }
+        permissionGranted = status.isGranted;
       }
-      permissionGranted = status.isGranted;
+    } else {
+      permissionGranted = true;
     }
-  } else {
-    permissionGranted = true; // No special permission needed for iOS doc dir
+
+    if (!permissionGranted) {
+      if (!mounted) return;
+      setState(() => _isExporting = false);
+      _showSnackBar(
+          "Izin penyimpanan ditolak. Buka Pengaturan untuk mengizinkan.",
+          isError: true,
+          icon: Icons.block_rounded);
+      return;
+    }
+
+    try {
+      // ── Buat file Excel ──
+      final excel = Excel.createExcel();
+
+      // Hapus sheet default "Sheet1" yang dibuat otomatis
+      excel.delete('Sheet1');
+
+      // ── SHEET 1: Ringkasan ──
+      final summarySheet = excel['Ringkasan'];
+      _buildSummarySheet(summarySheet);
+
+      // ── SHEET 2: Detail Transaksi ──
+      final detailSheet = excel['Detail Transaksi'];
+      _buildDetailSheet(detailSheet);
+
+      // ── Simpan file ──
+      final startStr = DateFormat('yyyy-MM-dd').format(_selectedStartDate);
+      final endStr = DateFormat('yyyy-MM-dd').format(_selectedEndDate);
+      final fileName = 'laporan_penjualan_${startStr}_$endStr.xlsx';
+
+      final directory = await getApplicationDocumentsDirectory();
+      final filePath = '${directory.path}/$fileName';
+      final fileBytes = excel.save();
+
+      if (fileBytes == null) throw Exception("Gagal generate file Excel");
+
+      final file = File(filePath);
+      await file.writeAsBytes(fileBytes);
+
+      if (!mounted) return;
+      setState(() => _isExporting = false);
+      _showExportSuccessDialog(filePath, fileName);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isExporting = false);
+      _showSnackBar("Terjadi kesalahan saat membuat file Excel: $e",
+          isError: true, icon: Icons.error_outline_rounded);
+    }
   }
 
-  if (!permissionGranted) {
-    if (!mounted) return;
-    setState(() => _isExporting = false);
-    _showSnackBar(
-        "Izin penyimpanan ditolak. Buka Pengaturan untuk mengizinkan.",
-        isError: true,
-        icon: Icons.block_rounded);
-    return;
+  // ── Helper: Style sel header tabel ──
+  CellStyle _headerStyle() => CellStyle(
+        bold: true,
+        backgroundColorHex: ExcelColor.fromHexString('#2D6A4F'),
+        fontColorHex: ExcelColor.fromHexString('#FFFFFF'),
+        horizontalAlign: HorizontalAlign.Center,
+        verticalAlign: VerticalAlign.Center,
+        textWrapping: TextWrapping.WrapText,
+      );
+
+  // ── Helper: Style sel judul section ──
+  CellStyle _titleStyle() => CellStyle(
+        bold: true,
+        fontSize: 14,
+        fontColorHex: ExcelColor.fromHexString('#1B4332'),
+      );
+
+  // ── Helper: Style sel label ringkasan ──
+  CellStyle _labelStyle() => CellStyle(
+        bold: true,
+        fontColorHex: ExcelColor.fromHexString('#374151'),
+        backgroundColorHex: ExcelColor.fromHexString('#F0FDF4'),
+      );
+
+  // ── Helper: Style zebra row (baris genap) ──
+  CellStyle _zebraStyle() => CellStyle(
+        backgroundColorHex: ExcelColor.fromHexString('#F9FAFB'),
+      );
+
+  // ── Helper: Isi sel dengan teks dan style opsional ──
+  void _setCell(Sheet sheet, int row, int col, dynamic value,
+      {CellStyle? style}) {
+    final cell = sheet.cell(CellIndex.indexByColumnRow(
+        columnIndex: col, rowIndex: row));
+    if (value is double || value is int) {
+      cell.value = DoubleCellValue(value.toDouble());
+    } else {
+      cell.value = TextCellValue(value.toString());
+    }
+    if (style != null) cell.cellStyle = style;
   }
 
-  // ── Buat dan simpan file CSV ──
-  try {
-    final csvContent = _generateCsvContent(
-      _orders,
-      startDate: _selectedStartDate,
-      endDate: _selectedEndDate,
-      totalRevenue: _totalRevenue,
-      completedCount: _completedCount,
-      cancelledCount: _cancelledCount,
-      avgOrderValue: _avgOrderValue,
-    );
+  // ── Sheet Ringkasan ──
+  void _buildSummarySheet(Sheet sheet) {
+    // Judul
+    _setCell(sheet, 0, 0, 'LAPORAN PENJUALAN KOPITIAM33',
+        style: _titleStyle());
+    _setCell(sheet, 1, 0, 'Periode',
+        style: CellStyle(bold: true));
+    _setCell(sheet, 1, 1,
+        '${_formatDateShort(_selectedStartDate)} - ${_formatDateShort(_selectedEndDate)}');
+    _setCell(sheet, 2, 0, 'Digenerate',
+        style: CellStyle(bold: true));
+    _setCell(sheet, 2, 1,
+        DateFormat('dd MMM yyyy, HH:mm').format(DateTime.now()));
 
-    final startStr = DateFormat('yyyy-MM-dd').format(_selectedStartDate);
-    final endStr = DateFormat('yyyy-MM-dd').format(_selectedEndDate);
-    final fileName = 'laporan_penjualan_${startStr}_$endStr.csv';
+    // Spasi
+    _setCell(sheet, 3, 0, '');
 
-    final directory = await getApplicationDocumentsDirectory();
-    final filePath = '${directory.path}/$fileName';
-    final file = File(filePath);
+    // Header ringkasan
+    _setCell(sheet, 4, 0, 'Metrik', style: _headerStyle());
+    _setCell(sheet, 4, 1, 'Nilai', style: _headerStyle());
 
-    await file.writeAsString(csvContent);
+    // Data ringkasan
+    final summaryData = [
+      ['Total Pendapatan (Rp)', _totalRevenue],
+      ['Total Pesanan', _orders.length],
+      ['Pesanan Selesai', _completedCount],
+      ['Pesanan Dibatalkan', _cancelledCount],
+      ['Rata-rata Per Pesanan (Rp)', _avgOrderValue],
+    ];
 
-    if (!mounted) return;
-    setState(() => _isExporting = false);
-    _showExportSuccessDialog(filePath, fileName);
-    
-  } catch (e) {
-    if (!mounted) return;
-    setState(() => _isExporting = false);
-    _showSnackBar("Terjadi kesalahan saat membuat file: $e",
-        isError: true, icon: Icons.error_outline_rounded);
+    for (var i = 0; i < summaryData.length; i++) {
+      final isZebra = i % 2 == 1;
+      _setCell(sheet, 5 + i, 0, summaryData[i][0],
+          style: _labelStyle());
+      _setCell(sheet, 5 + i, 1, summaryData[i][1],
+          style: isZebra ? _zebraStyle() : null);
+    }
+
+    // Lebar kolom
+    sheet.setColumnWidth(0, 30);
+    sheet.setColumnWidth(1, 25);
   }
-}
 
+  // ── Sheet Detail Transaksi ──
+  void _buildDetailSheet(Sheet sheet) {
+    // Header kolom
+    final headers = [
+      'No', 'ID Pesanan', 'Nomor Pesanan', 'Pelanggan', 'Email',
+      'Tipe', 'Meja', 'Total (Rp)', 'Status', 'Metode Bayar',
+      'Tanggal', 'Item Pesanan',
+    ];
 
-  /// Dialog izin permanent ditolak
+    for (var col = 0; col < headers.length; col++) {
+      _setCell(sheet, 0, col, headers[col], style: _headerStyle());
+    }
+
+    // Data baris
+    for (var i = 0; i < _orders.length; i++) {
+      final order = _orders[i];
+      final itemsDetail = order.items
+              ?.map((it) => '${it.quantity}x ${it.productName}')
+              .join(', ') ??
+          '-';
+      final isZebra = i % 2 == 1;
+      final zebraStyle = isZebra ? _zebraStyle() : null;
+
+      final rowData = [
+        i + 1,
+        order.id,
+        order.orderNumber,
+        order.user?.name ?? 'N/A',
+        order.user?.email ?? 'N/A',
+        order.orderType ?? '-',
+        order.tableNumber?.toString() ?? '-',
+        order.totalAmount,
+        _getStatusLabel(order.status),
+        order.paymentMethod ?? 'N/A',
+        DateFormat('dd/MM/yyyy HH:mm').format(order.createdAt),
+        itemsDetail,
+      ];
+
+      for (var col = 0; col < rowData.length; col++) {
+        _setCell(sheet, i + 1, col, rowData[col], style: zebraStyle);
+      }
+    }
+
+    // Baris total di paling bawah
+    if (_orders.isNotEmpty) {
+      final totalRow = _orders.length + 1;
+      _setCell(sheet, totalRow, 6, 'TOTAL',
+          style: CellStyle(
+            bold: true,
+            backgroundColorHex: ExcelColor.fromHexString('#ECFDF5'),
+            fontColorHex: ExcelColor.fromHexString('#1B4332'),
+          ));
+      _setCell(sheet, totalRow, 7, _totalRevenue,
+          style: CellStyle(
+            bold: true,
+            backgroundColorHex: ExcelColor.fromHexString('#ECFDF5'),
+            fontColorHex: ExcelColor.fromHexString('#2D6A4F'),
+          ));
+    }
+
+    // Lebar kolom
+    sheet.setColumnWidth(0, 5);   // No
+    sheet.setColumnWidth(1, 10);  // ID
+    sheet.setColumnWidth(2, 20);  // Nomor Pesanan
+    sheet.setColumnWidth(3, 20);  // Pelanggan
+    sheet.setColumnWidth(4, 28);  // Email
+    sheet.setColumnWidth(5, 12);  // Tipe
+    sheet.setColumnWidth(6, 8);   // Meja
+    sheet.setColumnWidth(7, 18);  // Total
+    sheet.setColumnWidth(8, 14);  // Status
+    sheet.setColumnWidth(9, 16);  // Metode
+    sheet.setColumnWidth(10, 20); // Tanggal
+    sheet.setColumnWidth(11, 40); // Item
+  }
+
+  // =================================================================
+  // DIALOG & SNACKBAR
+  // =================================================================
   void _showPermissionDialog() {
     showDialog(
       context: context,
@@ -321,7 +425,8 @@ class _SalesReportPageState extends State<SalesReportPage>
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 60, height: 60,
+                width: 60,
+                height: 60,
                 decoration: BoxDecoration(
                   color: Colors.orange.withOpacity(0.1),
                   shape: BoxShape.circle,
@@ -393,7 +498,6 @@ class _SalesReportPageState extends State<SalesReportPage>
     );
   }
 
-  /// Dialog sukses ekspor
   void _showExportSuccessDialog(String filePath, String fileName) {
     showDialog(
       context: context,
@@ -406,29 +510,31 @@ class _SalesReportPageState extends State<SalesReportPage>
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 64, height: 64,
+                width: 64,
+                height: 64,
                 decoration: BoxDecoration(
-                  color: AppColors.primaryGreen.withOpacity(0.1),
+                  color: Colors.green.withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(Icons.download_done_rounded,
-                    color: AppColors.primaryGreen, size: 32),
+                    color: Colors.green.shade600, size: 32),
               ),
               const SizedBox(height: 14),
-              Text("Ekspor Berhasil!",
+              Text("Ekspor Excel Berhasil!",
                   style: GoogleFonts.playfairDisplay(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                       color: const Color(0xFF1A1A1A))),
               const SizedBox(height: 8),
-              Text("File laporan Excel (CSV) berhasil disimpan.",
+              Text(
+                  "File Excel (.xlsx) berhasil dibuat dengan 2 sheet:\nRingkasan & Detail Transaksi.",
                   textAlign: TextAlign.center,
                   style: GoogleFonts.poppins(
-                      fontSize: 13, color: Colors.grey.shade600)),
+                      fontSize: 12.5, color: Colors.grey.shade600, height: 1.5)),
               const SizedBox(height: 10),
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade50,
                   borderRadius: BorderRadius.circular(10),
@@ -436,7 +542,7 @@ class _SalesReportPageState extends State<SalesReportPage>
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.insert_drive_file_rounded,
+                    Icon(Icons.table_chart_rounded,
                         color: Colors.green.shade600, size: 18),
                     const SizedBox(width: 8),
                     Expanded(
@@ -452,14 +558,13 @@ class _SalesReportPageState extends State<SalesReportPage>
                 ),
               ),
               const SizedBox(height: 20),
-              // Tombol Bagikan
               GestureDetector(
                 onTap: () {
                   Navigator.pop(context);
                   Share.shareXFiles(
                     [XFile(filePath)],
                     subject: 'Laporan Penjualan Kopitiam33',
-                    text: 'Laporan penjualan periode terlampir.',
+                    text: 'Laporan penjualan Excel terlampir.',
                   );
                 },
                 child: Container(
@@ -467,13 +572,13 @@ class _SalesReportPageState extends State<SalesReportPage>
                   padding: const EdgeInsets.symmetric(vertical: 13),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(colors: [
-                      AppColors.primaryGreen,
-                      AppColors.primaryGreen.withOpacity(0.85),
+                      Colors.green.shade700,
+                      Colors.green.shade500,
                     ]),
                     borderRadius: BorderRadius.circular(13),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primaryGreen.withOpacity(0.3),
+                        color: Colors.green.withOpacity(0.3),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
@@ -485,7 +590,7 @@ class _SalesReportPageState extends State<SalesReportPage>
                       const Icon(Icons.share_rounded,
                           color: Colors.white, size: 18),
                       const SizedBox(width: 8),
-                      Text("Bagikan File",
+                      Text("Bagikan File Excel",
                           style: GoogleFonts.poppins(
                               fontSize: 14,
                               fontWeight: FontWeight.w700,
@@ -495,7 +600,6 @@ class _SalesReportPageState extends State<SalesReportPage>
                 ),
               ),
               const SizedBox(height: 10),
-              // Tombol Oke
               GestureDetector(
                 onTap: () => Navigator.pop(context),
                 child: Container(
@@ -561,7 +665,8 @@ class _SalesReportPageState extends State<SalesReportPage>
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 40, height: 4,
+              width: 40,
+              height: 4,
               margin: const EdgeInsets.only(bottom: 20),
               decoration: BoxDecoration(
                 color: Colors.grey.shade300,
@@ -580,11 +685,14 @@ class _SalesReportPageState extends State<SalesReportPage>
             const SizedBox(height: 20),
             _exportOptionTile(
               icon: Icons.table_chart_rounded,
-              iconColor: Colors.green.shade600,
+              iconColor: Colors.green.shade700,
               bgColor: Colors.green.shade50,
-              title: "Excel (CSV)",
+              title: "Excel (.xlsx)",
               subtitle: "Buka di Microsoft Excel atau Google Sheets",
-              onTap: () { Navigator.pop(context); _exportReport(); },
+              onTap: () {
+                Navigator.pop(context);
+                _exportReport();
+              },
             ),
             const SizedBox(height: 12),
             _exportOptionTile(
@@ -593,7 +701,10 @@ class _SalesReportPageState extends State<SalesReportPage>
               bgColor: Colors.red.shade50,
               title: "PDF",
               subtitle: "Laporan siap cetak dengan tampilan rapi",
-              onTap: () { Navigator.pop(context); _exportPdf(); },
+              onTap: () {
+                Navigator.pop(context);
+                _exportPdf();
+              },
             ),
           ],
         ),
@@ -620,14 +731,16 @@ class _SalesReportPageState extends State<SalesReportPage>
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.04),
-              blurRadius: 8, offset: const Offset(0, 2),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
           ],
         ),
         child: Row(
           children: [
             Container(
-              width: 46, height: 46,
+              width: 46,
+              height: 46,
               decoration: BoxDecoration(
                 color: bgColor,
                 borderRadius: BorderRadius.circular(12),
@@ -646,8 +759,7 @@ class _SalesReportPageState extends State<SalesReportPage>
                           color: const Color(0xFF1A1A1A))),
                   Text(subtitle,
                       style: GoogleFonts.poppins(
-                          fontSize: 11.5,
-                          color: Colors.grey.shade500)),
+                          fontSize: 11.5, color: Colors.grey.shade500)),
                 ],
               ),
             ),
@@ -660,7 +772,7 @@ class _SalesReportPageState extends State<SalesReportPage>
   }
 
   // ─────────────────────────────────────────────────
-  // EKSPOR PDF — bersih tanpa duplikasi
+  // EKSPOR PDF
   // ─────────────────────────────────────────────────
   Future<void> _exportPdf() async {
     if (_isExportingPdf || _orders.isEmpty) return;
@@ -685,7 +797,8 @@ class _SalesReportPageState extends State<SalesReportPage>
 
       final startStr = DateFormat('dd MMM yyyy').format(_selectedStartDate);
       final endStr = DateFormat('dd MMM yyyy').format(_selectedEndDate);
-      final generated = DateFormat('dd MMM yyyy, HH:mm').format(DateTime.now());
+      final generated =
+          DateFormat('dd MMM yyyy, HH:mm').format(DateTime.now());
 
       final primaryGreen = PdfColor.fromHex('2D6A4F');
       final darkGreen = PdfColor.fromHex('1B4332');
@@ -697,21 +810,26 @@ class _SalesReportPageState extends State<SalesReportPage>
 
       PdfColor sc(String status) {
         switch (status) {
-          case 'completed': case 'paid': return primaryGreen;
-          case 'cancelled': return red;
-          case 'processing': return blue;
-          default: return amber;
+          case 'completed':
+          case 'paid':
+            return primaryGreen;
+          case 'cancelled':
+            return red;
+          case 'processing':
+            return blue;
+          default:
+            return amber;
         }
       }
 
       String sl(String status) {
         switch (status) {
-          case 'pending': return 'Menunggu';
-          case 'paid': return 'Dibayar';
+          case 'pending':    return 'Menunggu';
+          case 'paid':       return 'Dibayar';
           case 'processing': return 'Diproses';
-          case 'completed': return 'Selesai';
-          case 'cancelled': return 'Dibatalkan';
-          default: return status;
+          case 'completed':  return 'Selesai';
+          case 'cancelled':  return 'Dibatalkan';
+          default:           return status;
         }
       }
 
@@ -727,58 +845,85 @@ class _SalesReportPageState extends State<SalesReportPage>
           child: pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-                pw.Text('Kopitiam33',
-                    style: pw.TextStyle(font: fontBold, fontSize: 18, color: PdfColors.white)),
-                pw.SizedBox(height: 3),
-                pw.Text('Laporan Penjualan',
-                    style: pw.TextStyle(font: font, fontSize: 11, color: PdfColors.white)),
-                pw.Text('Periode: $startStr - $endStr',
-                    style: pw.TextStyle(font: font, fontSize: 9, color: PdfColors.grey300)),
-              ]),
-              pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
-                pw.Text('Digenerate:',
-                    style: pw.TextStyle(font: font, fontSize: 9, color: PdfColors.grey300)),
-                pw.Text(generated,
-                    style: pw.TextStyle(font: fontBold, fontSize: 9, color: PdfColors.white)),
-                pw.SizedBox(height: 3),
-                pw.Text('Hal. ${ctx.pageNumber}/${ctx.pagesCount}',
-                    style: pw.TextStyle(font: font, fontSize: 9, color: PdfColors.grey300)),
-              ]),
+              pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('Kopitiam33',
+                        style: pw.TextStyle(
+                            font: fontBold,
+                            fontSize: 18,
+                            color: PdfColors.white)),
+                    pw.SizedBox(height: 3),
+                    pw.Text('Laporan Penjualan',
+                        style: pw.TextStyle(
+                            font: font,
+                            fontSize: 11,
+                            color: PdfColors.white)),
+                    pw.Text('Periode: $startStr - $endStr',
+                        style: pw.TextStyle(
+                            font: font,
+                            fontSize: 9,
+                            color: PdfColors.grey300)),
+                  ]),
+              pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text('Digenerate:',
+                        style: pw.TextStyle(
+                            font: font,
+                            fontSize: 9,
+                            color: PdfColors.grey300)),
+                    pw.Text(generated,
+                        style: pw.TextStyle(
+                            font: fontBold,
+                            fontSize: 9,
+                            color: PdfColors.white)),
+                    pw.SizedBox(height: 3),
+                    pw.Text('Hal. ${ctx.pageNumber}/${ctx.pagesCount}',
+                        style: pw.TextStyle(
+                            font: font,
+                            fontSize: 9,
+                            color: PdfColors.grey300)),
+                  ]),
             ],
           ),
         ),
         build: (ctx) => [
           pw.SizedBox(height: 12),
-
-          // KPI Cards
           pw.Row(children: [
-            _kpi('Total Pendapatan', fmtRp(totalRevenue), primaryGreen, lightGreen, font, fontBold),
+            _kpi('Total Pendapatan', fmtRp(totalRevenue), primaryGreen,
+                lightGreen, font, fontBold),
             pw.SizedBox(width: 6),
-            _kpi('Total Pesanan', '${_orders.length}', blue, PdfColor.fromHex('EFF6FF'), font, fontBold),
+            _kpi('Total Pesanan', '${_orders.length}', blue,
+                PdfColor.fromHex('EFF6FF'), font, fontBold),
             pw.SizedBox(width: 6),
-            _kpi('Selesai', '$completedCount', primaryGreen, lightGreen, font, fontBold),
+            _kpi('Selesai', '$completedCount', primaryGreen, lightGreen,
+                font, fontBold),
             pw.SizedBox(width: 6),
-            _kpi('Dibatalkan', '$cancelledCount', red, PdfColor.fromHex('FEF2F2'), font, fontBold),
+            _kpi('Dibatalkan', '$cancelledCount', red,
+                PdfColor.fromHex('FEF2F2'), font, fontBold),
             pw.SizedBox(width: 6),
-            _kpi('Rata-rata', fmtRp(avgOrder), PdfColor.fromHex('7C3AED'), PdfColor.fromHex('F5F3FF'), font, fontBold),
+            _kpi('Rata-rata', fmtRp(avgOrder),
+                PdfColor.fromHex('7C3AED'),
+                PdfColor.fromHex('F5F3FF'), font, fontBold),
           ]),
-
           pw.SizedBox(height: 14),
-
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
               pw.Text('Detail Transaksi',
-                  style: pw.TextStyle(font: fontBold, fontSize: 13, color: PdfColor.fromHex('1F2937'))),
+                  style: pw.TextStyle(
+                      font: fontBold,
+                      fontSize: 13,
+                      color: PdfColor.fromHex('1F2937'))),
               pw.Text('${_orders.length} pesanan',
                   style: pw.TextStyle(font: font, fontSize: 9, color: grey)),
             ],
           ),
           pw.SizedBox(height: 6),
-
           pw.Table(
-            border: pw.TableBorder.all(color: PdfColor.fromHex('E5E7EB'), width: 0.5),
+            border: pw.TableBorder.all(
+                color: PdfColor.fromHex('E5E7EB'), width: 0.5),
             columnWidths: {
               0: const pw.FixedColumnWidth(20),
               1: const pw.FlexColumnWidth(2.2),
@@ -792,66 +937,90 @@ class _SalesReportPageState extends State<SalesReportPage>
             children: [
               pw.TableRow(
                 decoration: pw.BoxDecoration(color: darkGreen),
-                children: ['No','Nomor Pesanan','Pelanggan','Tipe','Item','Status','Tanggal','Total']
+                children: [
+                  'No', 'Nomor Pesanan', 'Pelanggan', 'Tipe',
+                  'Item', 'Status', 'Tanggal', 'Total'
+                ]
                     .map((h) => pw.Padding(
-                          padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 6),
+                          padding: const pw.EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 6),
                           child: pw.Text(h,
-                              style: pw.TextStyle(font: fontBold, fontSize: 8, color: PdfColors.white)),
+                              style: pw.TextStyle(
+                                  font: fontBold,
+                                  fontSize: 8,
+                                  color: PdfColors.white)),
                         ))
                     .toList(),
               ),
               ..._orders.asMap().entries.map((e) {
-  final i = e.key;
-  final o = e.value;
-  final rowBg = i % 2 == 0 ? PdfColors.white : PdfColors.grey100;
-  final sColor = sc(o.status);
-  final items = (o.items ?? []).map((it) => '${it.quantity}x ${it.productName}').join(', ');
-  final tipe = o.orderType == 'dine-in' ? 'Dine In' : 'Pickup';
-  return pw.TableRow(
-    decoration: pw.BoxDecoration(color: rowBg),
-    children: [
-      _tc('${i+1}', font, 8, grey, align: pw.TextAlign.center),
-      _tc(o.orderNumber, fontBold, 8, PdfColor.fromHex('1F2937')),
-      _tc(o.user?.name ?? 'N/A', font, 8, PdfColor.fromHex('374151')),
-      _tc(tipe, font, 7.5, grey),
-      _tc(items.isEmpty ? '-' : items, font, 7.5, grey, maxLines: 2),
-      
-      // ============ BAGIAN YANG SUDAH DIPERBAIKI (KODE BARU) ============
-      _tc(sl(o.status), fontBold, 8, sColor),
-      // ====================================================================
-
-      _tc(DateFormat('dd/MM/yy HH:mm').format(o.createdAt), font, 7.5, grey),
-      _tc(fmtRp(o.totalAmount), fontBold, 8, primaryGreen, align: pw.TextAlign.right),
-    ],
-  );
-}),
+                final i = e.key;
+                final o = e.value;
+                final rowBg =
+                    i % 2 == 0 ? PdfColors.white : PdfColors.grey100;
+                final sColor = sc(o.status);
+                final items = (o.items ?? [])
+                    .map((it) => '${it.quantity}x ${it.productName}')
+                    .join(', ');
+                final tipe =
+                    o.orderType == 'dine-in' ? 'Dine In' : 'Pickup';
+                return pw.TableRow(
+                  decoration: pw.BoxDecoration(color: rowBg),
+                  children: [
+                    _tc('${i + 1}', font, 8, grey,
+                        align: pw.TextAlign.center),
+                    _tc(o.orderNumber, fontBold, 8,
+                        PdfColor.fromHex('1F2937')),
+                    _tc(o.user?.name ?? 'N/A', font, 8,
+                        PdfColor.fromHex('374151')),
+                    _tc(tipe, font, 7.5, grey),
+                    _tc(items.isEmpty ? '-' : items, font, 7.5, grey,
+                        maxLines: 2),
+                    _tc(sl(o.status), fontBold, 8, sColor),
+                    _tc(DateFormat('dd/MM/yy HH:mm').format(o.createdAt),
+                        font, 7.5, grey),
+                    _tc(fmtRp(o.totalAmount), fontBold, 8, primaryGreen,
+                        align: pw.TextAlign.right),
+                  ],
+                );
+              }),
               pw.TableRow(
-                decoration: pw.BoxDecoration(color: PdfColor.fromHex('F0FDF4')),
+                decoration:
+                    pw.BoxDecoration(color: PdfColor.fromHex('F0FDF4')),
                 children: [
                   pw.SizedBox(), pw.SizedBox(), pw.SizedBox(),
                   pw.SizedBox(), pw.SizedBox(), pw.SizedBox(),
                   pw.Padding(
-                    padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 8),
+                    padding: const pw.EdgeInsets.symmetric(
+                        horizontal: 5, vertical: 8),
                     child: pw.Text('TOTAL',
-                        style: pw.TextStyle(font: fontBold, fontSize: 9, color: PdfColor.fromHex('1F2937')),
+                        style: pw.TextStyle(
+                            font: fontBold,
+                            fontSize: 9,
+                            color: PdfColor.fromHex('1F2937')),
                         textAlign: pw.TextAlign.right),
                   ),
                   pw.Padding(
-                    padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 8),
+                    padding: const pw.EdgeInsets.symmetric(
+                        horizontal: 5, vertical: 8),
                     child: pw.Text(fmtRp(totalRevenue),
-                        style: pw.TextStyle(font: fontBold, fontSize: 9, color: primaryGreen),
+                        style: pw.TextStyle(
+                            font: fontBold,
+                            fontSize: 9,
+                            color: primaryGreen),
                         textAlign: pw.TextAlign.right),
                   ),
                 ],
               ),
             ],
           ),
-
           pw.SizedBox(height: 12),
           pw.Center(
             child: pw.Text(
               'Laporan digenerate otomatis oleh sistem Kopitiam33 - $generated',
-              style: pw.TextStyle(font: font, fontSize: 7.5, color: PdfColor.fromHex('9CA3AF')),
+              style: pw.TextStyle(
+                  font: font,
+                  fontSize: 7.5,
+                  color: PdfColor.fromHex('9CA3AF')),
             ),
           ),
         ],
@@ -899,10 +1068,14 @@ class _SalesReportPageState extends State<SalesReportPage>
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
             pw.Text(label,
-                style: pw.TextStyle(font: font, fontSize: 7, color: PdfColor.fromHex('6B7280'))),
+                style: pw.TextStyle(
+                    font: font,
+                    fontSize: 7,
+                    color: PdfColor.fromHex('6B7280'))),
             pw.SizedBox(height: 3),
             pw.Text(value,
-                style: pw.TextStyle(font: fontBold, fontSize: 10, color: color)),
+                style:
+                    pw.TextStyle(font: fontBold, fontSize: 10, color: color)),
           ],
         ),
       ),
@@ -922,7 +1095,8 @@ class _SalesReportPageState extends State<SalesReportPage>
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 64, height: 64,
+                width: 64,
+                height: 64,
                 decoration: BoxDecoration(
                   color: Colors.red.withOpacity(0.1),
                   shape: BoxShape.circle,
@@ -968,7 +1142,6 @@ class _SalesReportPageState extends State<SalesReportPage>
                 ),
               ),
               const SizedBox(height: 20),
-              // Bagikan
               GestureDetector(
                 onTap: () {
                   Navigator.pop(context);
@@ -1008,7 +1181,6 @@ class _SalesReportPageState extends State<SalesReportPage>
                 ),
               ),
               const SizedBox(height: 10),
-              // Nanti
               GestureDetector(
                 onTap: () => Navigator.pop(context),
                 child: Container(
@@ -1156,11 +1328,10 @@ class _SalesReportPageState extends State<SalesReportPage>
                       ],
                     ),
                   ),
-                  // Tombol Ekspor (1 tombol, 2 pilihan)
                   GestureDetector(
                     onTap: (_isExporting || _isExportingPdf)
                         ? null
-                        : () => _showExportOptions(),
+                        : _showExportOptions,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 8),
@@ -1202,7 +1373,8 @@ class _SalesReportPageState extends State<SalesReportPage>
   }
 
   Widget _circle(double size, double opacity) => Container(
-        width: size, height: size,
+        width: size,
+        height: size,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: Colors.white.withOpacity(opacity),
@@ -1218,7 +1390,8 @@ class _SalesReportPageState extends State<SalesReportPage>
       child: GestureDetector(
         onTap: _selectDateRange,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
@@ -1247,7 +1420,8 @@ class _SalesReportPageState extends State<SalesReportPage>
                   children: [
                     Text("Periode Laporan",
                         style: GoogleFonts.poppins(
-                            fontSize: 10.5, color: Colors.grey.shade500)),
+                            fontSize: 10.5,
+                            color: Colors.grey.shade500)),
                     Text(
                       "${_formatDateShort(_selectedStartDate)}  –  ${_formatDateShort(_selectedEndDate)}",
                       style: GoogleFonts.poppins(
@@ -1260,7 +1434,8 @@ class _SalesReportPageState extends State<SalesReportPage>
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
                   color: AppColors.primaryGreen.withOpacity(0.08),
                   borderRadius: BorderRadius.circular(10),
@@ -1286,7 +1461,6 @@ class _SalesReportPageState extends State<SalesReportPage>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 8),
-        // Kartu omset utama
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(18),
@@ -1343,7 +1517,8 @@ class _SalesReportPageState extends State<SalesReportPage>
                 children: [
                   Text("Rata-rata / pesanan",
                       style: GoogleFonts.poppins(
-                          fontSize: 10, color: Colors.white.withOpacity(0.7))),
+                          fontSize: 10,
+                          color: Colors.white.withOpacity(0.7))),
                   Text(_formatPrice(_avgOrderValue),
                       style: GoogleFonts.poppins(
                           fontSize: 13,
@@ -1357,7 +1532,6 @@ class _SalesReportPageState extends State<SalesReportPage>
 
         const SizedBox(height: 12),
 
-        // 4 kartu statistik kecil
         GridView.count(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -1434,7 +1608,8 @@ class _SalesReportPageState extends State<SalesReportPage>
     return Row(
       children: [
         Container(
-          width: 4, height: 20,
+          width: 4,
+          height: 20,
           decoration: BoxDecoration(
             color: AppColors.primaryGreen,
             borderRadius: BorderRadius.circular(2),
@@ -1483,7 +1658,8 @@ class _SalesReportPageState extends State<SalesReportPage>
             Row(
               children: [
                 Container(
-                  width: 36, height: 36,
+                  width: 36,
+                  height: 36,
                   decoration: BoxDecoration(
                     color: statusColor.withOpacity(0.1),
                     shape: BoxShape.circle,
@@ -1502,7 +1678,8 @@ class _SalesReportPageState extends State<SalesReportPage>
                               color: const Color(0xFF1A1A1A))),
                       Text("👤 ${order.user?.name ?? 'N/A'}",
                           style: GoogleFonts.poppins(
-                              fontSize: 11.5, color: Colors.grey.shade500)),
+                              fontSize: 11.5,
+                              color: Colors.grey.shade500)),
                     ],
                   ),
                 ),
@@ -1536,7 +1713,6 @@ class _SalesReportPageState extends State<SalesReportPage>
             Divider(height: 1, color: Colors.grey.shade100),
             const SizedBox(height: 8),
 
-            // Tanggal
             Row(
               children: [
                 Icon(Icons.schedule_rounded,
@@ -1550,14 +1726,14 @@ class _SalesReportPageState extends State<SalesReportPage>
 
             const SizedBox(height: 8),
 
-            // Items
             if (order.items != null && order.items!.isNotEmpty)
               ...order.items!.map((item) => Padding(
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Row(
                       children: [
                         Container(
-                          width: 20, height: 20,
+                          width: 20,
+                          height: 20,
                           margin: const EdgeInsets.only(right: 7),
                           decoration: BoxDecoration(
                             color: AppColors.primaryGreen.withOpacity(0.1),
@@ -1607,13 +1783,15 @@ class _SalesReportPageState extends State<SalesReportPage>
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 80, height: 80,
+              width: 80,
+              height: 80,
               decoration: BoxDecoration(
                 color: AppColors.primaryGreen.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(Icons.receipt_long_rounded,
-                  size: 38, color: AppColors.primaryGreen.withOpacity(0.5)),
+                  size: 38,
+                  color: AppColors.primaryGreen.withOpacity(0.5)),
             ),
             const SizedBox(height: 16),
             Text("Tidak Ada Data Penjualan",
@@ -1659,7 +1837,8 @@ class _SalesReportPageState extends State<SalesReportPage>
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 80, height: 80,
+              width: 80,
+              height: 80,
               decoration: BoxDecoration(
                 color: Colors.red.withOpacity(0.08),
                 shape: BoxShape.circle,

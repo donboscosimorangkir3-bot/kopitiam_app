@@ -21,9 +21,14 @@ class _ProfileManagementPageState extends State<ProfileManagementPage>
   late Animation<double> _fadeAnim;
   late Animation<Offset> _slideAnim;
 
+  // ── State user lokal agar bisa diperbarui tanpa logout ──
+  late User _currentUser;
+
   @override
   void initState() {
     super.initState();
+    _currentUser = widget.user;
+
     _animController = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 600));
     _fadeAnim =
@@ -41,22 +46,27 @@ class _ProfileManagementPageState extends State<ProfileManagementPage>
     super.dispose();
   }
 
-  // Inisial nama untuk avatar
   String get _initials {
-    final parts = widget.user.name.trim().split(' ');
+    final parts = _currentUser.name.trim().split(' ');
     if (parts.length >= 2) {
       return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
     }
     return parts[0][0].toUpperCase();
   }
 
-  void _openEditProfile() {
-    Navigator.push(
+  // ── Buka edit profil, tunggu result, lalu update state lokal ──
+  Future<void> _openEditProfile() async {
+    final updatedUser = await Navigator.push<User>(
       context,
       MaterialPageRoute(
-        builder: (_) => _EditProfilePage(user: widget.user),
+        builder: (_) => _EditProfilePage(user: _currentUser),
       ),
     );
+
+    // Jika ada data baru yang dikembalikan dari edit page, langsung update UI
+    if (updatedUser != null && mounted) {
+      setState(() => _currentUser = updatedUser);
+    }
   }
 
   @override
@@ -75,10 +85,7 @@ class _ProfileManagementPageState extends State<ProfileManagementPage>
           child: CustomScrollView(
             physics: const BouncingScrollPhysics(),
             slivers: [
-              // ─── HEADER ───
               SliverToBoxAdapter(child: _buildHeader()),
-
-              // ─── INFO CARDS ───
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
@@ -100,7 +107,7 @@ class _ProfileManagementPageState extends State<ProfileManagementPage>
   }
 
   // ─────────────────────────────────────────────────
-  // HEADER — sama persis gaya seperti profil pelanggan
+  // HEADER
   // ─────────────────────────────────────────────────
   Widget _buildHeader() {
     return Container(
@@ -116,7 +123,6 @@ class _ProfileManagementPageState extends State<ProfileManagementPage>
       ),
       child: Stack(
         children: [
-          // Dekorasi lingkaran background
           Positioned(top: -25, right: -20, child: _circle(140, 0.07)),
           Positioned(top: 50, right: 65, child: _circle(55, 0.08)),
           Positioned(bottom: -10, left: -30, child: _circle(80, 0.05)),
@@ -131,7 +137,7 @@ class _ProfileManagementPageState extends State<ProfileManagementPage>
                   Align(
                     alignment: Alignment.centerLeft,
                     child: GestureDetector(
-                      onTap: () => Navigator.pop(context),
+                      onTap: () => Navigator.pop(context, _currentUser),
                       child: Container(
                         width: 38,
                         height: 38,
@@ -149,7 +155,7 @@ class _ProfileManagementPageState extends State<ProfileManagementPage>
 
                   const SizedBox(height: 16),
 
-                  // Avatar
+                  // Avatar — pakai _currentUser agar update langsung
                   Container(
                     width: 86,
                     height: 86,
@@ -178,9 +184,8 @@ class _ProfileManagementPageState extends State<ProfileManagementPage>
 
                   const SizedBox(height: 12),
 
-                  // Nama
                   Text(
-                    widget.user.name,
+                    _currentUser.name,
                     style: GoogleFonts.playfairDisplay(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
@@ -190,9 +195,8 @@ class _ProfileManagementPageState extends State<ProfileManagementPage>
 
                   const SizedBox(height: 4),
 
-                  // Email
                   Text(
-                    widget.user.email,
+                    _currentUser.email,
                     style: GoogleFonts.poppins(
                       fontSize: 13,
                       color: Colors.white70,
@@ -247,7 +251,7 @@ class _ProfileManagementPageState extends State<ProfileManagementPage>
       );
 
   // ─────────────────────────────────────────────────
-  // INFO CARD — tampilkan data profil
+  // INFO CARD — pakai _currentUser
   // ─────────────────────────────────────────────────
   Widget _buildInfoCard() {
     return Container(
@@ -270,21 +274,20 @@ class _ProfileManagementPageState extends State<ProfileManagementPage>
           _infoRow(
             icon: Icons.person_outline_rounded,
             label: "Nama Lengkap",
-            value: widget.user.name,
+            value: _currentUser.name,
           ),
           _divider(),
           _infoRow(
             icon: Icons.email_outlined,
             label: "Email",
-            value: widget.user.email,
+            value: _currentUser.email,
           ),
           _divider(),
           _infoRow(
             icon: Icons.phone_android_outlined,
             label: "Nomor Telepon",
-            value: widget.user.phone ?? "-",
+            value: _currentUser.phone ?? "-",
           ),
-          
           _divider(),
           _infoRow(
             icon: Icons.badge_outlined,
@@ -351,9 +354,6 @@ class _ProfileManagementPageState extends State<ProfileManagementPage>
         thickness: 1,
       );
 
-  // ─────────────────────────────────────────────────
-  // TOMBOL EDIT PROFIL
-  // ─────────────────────────────────────────────────
   Widget _buildEditButton() {
     return GestureDetector(
       onTap: _openEditProfile,
@@ -406,7 +406,6 @@ class _EditProfilePageState extends State<_EditProfilePage> {
   final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
-  final _birthCtrl = TextEditingController();
   final _currPassCtrl = TextEditingController();
   final _newPassCtrl = TextEditingController();
   final _confirmPassCtrl = TextEditingController();
@@ -423,7 +422,6 @@ class _EditProfilePageState extends State<_EditProfilePage> {
     _nameCtrl.text = widget.user.name;
     _emailCtrl.text = widget.user.email;
     _phoneCtrl.text = widget.user.phone ?? '';
-    
   }
 
   @override
@@ -431,14 +429,11 @@ class _EditProfilePageState extends State<_EditProfilePage> {
     _nameCtrl.dispose();
     _emailCtrl.dispose();
     _phoneCtrl.dispose();
-    _birthCtrl.dispose();
     _currPassCtrl.dispose();
     _newPassCtrl.dispose();
     _confirmPassCtrl.dispose();
     super.dispose();
   }
-
- 
 
   Future<void> _handleSaveProfile() async {
     if (_nameCtrl.text.trim().isEmpty) {
@@ -457,10 +452,24 @@ class _EditProfilePageState extends State<_EditProfilePage> {
     if (!mounted) return;
     setState(() => _isSavingProfile = false);
 
-    _showSnack(
-      success ? "Profil berhasil diperbarui!" : "Gagal memperbarui profil",
-      isError: !success,
-    );
+    if (success) {
+      _showSnack("Profil berhasil diperbarui!");
+
+      // Buat User baru dengan data terbaru lalu kembalikan ke ProfileManagementPage
+      final updatedUser = User(
+        id: widget.user.id,
+        name: _nameCtrl.text.trim(),
+        email: _emailCtrl.text.trim(),
+        phone: _phoneCtrl.text.trim(),
+        role: widget.user.role,
+      );
+
+      // Tunggu sebentar agar snackbar terlihat, lalu pop dengan data baru
+      await Future.delayed(const Duration(milliseconds: 800));
+      if (mounted) Navigator.pop(context, updatedUser);
+    } else {
+      _showSnack("Gagal memperbarui profil", isError: true);
+    }
   }
 
   Future<void> _handleChangePassword() async {
@@ -483,6 +492,12 @@ class _EditProfilePageState extends State<_EditProfilePage> {
 
     if (!mounted) return;
     setState(() => _isSavingPass = false);
+
+    if (success) {
+      _currPassCtrl.clear();
+      _newPassCtrl.clear();
+      _confirmPassCtrl.clear();
+    }
 
     _showSnack(
       success ? "Password berhasil diubah!" : "Gagal mengubah password",
@@ -548,7 +563,6 @@ class _EditProfilePageState extends State<_EditProfilePage> {
                   icon: Icons.phone_android_outlined,
                   keyboardType: TextInputType.phone,
                 ),
-                
                 const SizedBox(height: 4),
                 _buildPrimaryButton(
                   label: "Simpan Profil",
@@ -660,7 +674,6 @@ class _EditProfilePageState extends State<_EditProfilePage> {
     bool enabled = true,
     String? hint,
     TextInputType keyboardType = TextInputType.text,
-    IconData? suffixIcon,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
@@ -675,9 +688,6 @@ class _EditProfilePageState extends State<_EditProfilePage> {
           hintText: hint,
           labelStyle: GoogleFonts.poppins(fontSize: 13),
           prefixIcon: Icon(icon, size: 18, color: AppColors.primaryGreen),
-          suffixIcon: suffixIcon != null
-              ? Icon(suffixIcon, size: 18, color: Colors.grey.shade400)
-              : null,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide(color: Colors.grey.shade200),
@@ -693,8 +703,8 @@ class _EditProfilePageState extends State<_EditProfilePage> {
           ),
           filled: true,
           fillColor: enabled ? Colors.white : Colors.grey.shade50,
-          contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16, vertical: 14),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         ),
       ),
     );
@@ -720,7 +730,9 @@ class _EditProfilePageState extends State<_EditProfilePage> {
               size: 18, color: Colors.orange.shade700),
           suffixIcon: IconButton(
             icon: Icon(
-              visible ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+              visible
+                  ? Icons.visibility_off_rounded
+                  : Icons.visibility_rounded,
               size: 18,
               color: Colors.grey.shade400,
             ),
@@ -736,13 +748,13 @@ class _EditProfilePageState extends State<_EditProfilePage> {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(
-                color: Colors.orange.shade700, width: 1.5),
+            borderSide:
+                BorderSide(color: Colors.orange.shade700, width: 1.5),
           ),
           filled: true,
           fillColor: Colors.white,
-          contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16, vertical: 14),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         ),
       ),
     );
