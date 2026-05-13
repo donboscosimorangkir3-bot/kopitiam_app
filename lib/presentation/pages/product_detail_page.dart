@@ -10,6 +10,8 @@ import 'package:kopitiam_app/data/models/product_model.dart';
 import 'package:kopitiam_app/presentation/pages/login_page.dart';
 import 'package:kopitiam_app/presentation/pages/cart_page.dart';
 import 'package:kopitiam_app/data/datasources/cart_remote_datasource.dart';
+import 'package:kopitiam_app/presentation/pages/checkout_page.dart';
+import 'package:kopitiam_app/data/models/cart_item_model.dart';
 
 class ProductDetailPage extends StatefulWidget {
   final Product product;
@@ -29,8 +31,9 @@ class _ProductDetailPageState extends State<ProductDetailPage>
     with TickerProviderStateMixin {
   int _quantity = 1;
   double _selectedPrice = 0;
-  String? _selectedVariant; // 'Hot' | 'Cold' | null
+  String? _selectedVariant;
   bool _isLoading = false;
+  bool _isBuyNowLoading = false;
   final TextEditingController _quantityController = TextEditingController();
 
   late AnimationController _entryController;
@@ -43,7 +46,7 @@ class _ProductDetailPageState extends State<ProductDetailPage>
   @override
   void initState() {
     super.initState();
-    _selectedPrice   = widget.product.price;
+    _selectedPrice = widget.product.price;
     _selectedVariant = widget.product.priceCold != null ? 'Hot' : null;
     _quantityController.text = _quantity.toString();
 
@@ -53,7 +56,8 @@ class _ProductDetailPageState extends State<ProductDetailPage>
         parent: _entryController,
         curve: const Interval(0.0, 0.5, curve: Curves.easeOut));
     _contentSlide = Tween<Offset>(
-      begin: const Offset(0, 0.18), end: Offset.zero,
+      begin: const Offset(0, 0.18),
+      end: Offset.zero,
     ).animate(CurvedAnimation(
         parent: _entryController,
         curve: const Interval(0.3, 1.0, curve: Curves.easeOutCubic)));
@@ -81,9 +85,23 @@ class _ProductDetailPageState extends State<ProductDetailPage>
     super.dispose();
   }
 
-  // ─────────────────────────────────────────────────
-  // HELPERS
-  // ─────────────────────────────────────────────────
+  // ── Helper: cacheKey menyertakan updatedAt ──────
+  String _buildCacheKey() {
+    final version = widget.product.updatedAt ?? widget.product.id.toString();
+    return 'product_detail_${widget.product.id}_$version';
+  }
+
+  // ── Helper: URL dengan cache-busting ───────────
+  String _buildImageUrl(String url) {
+    final version = widget.product.updatedAt
+            ?.replaceAll(RegExp(r'[^0-9]'), '') ??
+        widget.product.id.toString();
+    if (url.contains('?')) {
+      return '$url&v=$version';
+    }
+    return '$url?v=$version';
+  }
+
   String _formatPrice(double price) => NumberFormat.currency(
       locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(price);
 
@@ -106,7 +124,7 @@ class _ProductDetailPageState extends State<ProductDetailPage>
   void _selectVariant(String variant) {
     setState(() {
       _selectedVariant = variant;
-      _selectedPrice   = variant == 'Hot'
+      _selectedPrice = variant == 'Hot'
           ? widget.product.price
           : (widget.product.priceCold ?? widget.product.price);
     });
@@ -125,15 +143,12 @@ class _ProductDetailPageState extends State<ProductDetailPage>
       ),
       backgroundColor: color,
       behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
     ));
   }
 
-  // ─────────────────────────────────────────────────
-  // ADD TO CART
-  // Mengirim note ke backend: 'Hot', 'Cold', atau null
-  // ─────────────────────────────────────────────────
   Future<void> _addToCart() async {
     await _btnController.reverse();
     _btnController.forward();
@@ -141,8 +156,8 @@ class _ProductDetailPageState extends State<ProductDetailPage>
     if (!widget.isLoggedIn) {
       _showSnack("Silakan login untuk memesan!",
           icon: Icons.info_outline, color: AppColors.primaryGreen);
-      Navigator.push(
-          context, MaterialPageRoute(builder: (_) => const LoginPage()));
+      Navigator.push(context,
+          MaterialPageRoute(builder: (_) => const LoginPage()));
       return;
     }
 
@@ -154,7 +169,8 @@ class _ProductDetailPageState extends State<ProductDetailPage>
 
     if (widget.product.priceCold != null && _selectedVariant == null) {
       _showSnack("Pilih varian Panas atau Dingin terlebih dahulu.",
-          icon: Icons.thermostat_rounded, color: Colors.orange.shade700);
+          icon: Icons.thermostat_rounded,
+          color: Colors.orange.shade700);
       return;
     }
 
@@ -175,7 +191,6 @@ class _ProductDetailPageState extends State<ProductDetailPage>
           : _selectedVariant == 'Cold'
               ? 'Dingin'
               : '';
-
       final label = variantLabel.isNotEmpty
           ? "$_quantity × ${widget.product.name} ($variantLabel)"
           : "$_quantity × ${widget.product.name}";
@@ -200,18 +215,60 @@ class _ProductDetailPageState extends State<ProductDetailPage>
           action: SnackBarAction(
             label: "Lihat",
             textColor: Colors.white,
-            onPressed: () => Navigator.push(
-                context,
+            onPressed: () => Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const CartPage())),
           ),
         ),
       );
-      Navigator.push(
-          context, MaterialPageRoute(builder: (_) => const CartPage()));
     } else {
       _showSnack("Gagal menambahkan ke keranjang. Coba lagi.",
           icon: Icons.error_outline, color: Colors.redAccent);
     }
+  }
+
+  Future<void> _buyNow() async {
+    if (!widget.isLoggedIn) {
+      _showSnack("Silakan login untuk memesan!",
+          icon: Icons.info_outline, color: AppColors.primaryGreen);
+      Navigator.push(context,
+          MaterialPageRoute(builder: (_) => const LoginPage()));
+      return;
+    }
+
+    if (_quantity <= 0 || _quantity > widget.product.stock) {
+      _showSnack("Jumlah tidak valid atau melebihi stok!",
+          icon: Icons.warning_amber_rounded, color: Colors.redAccent);
+      return;
+    }
+
+    if (widget.product.priceCold != null && _selectedVariant == null) {
+      _showSnack("Pilih varian Panas atau Dingin terlebih dahulu.",
+          icon: Icons.thermostat_rounded,
+          color: Colors.orange.shade700);
+      return;
+    }
+
+    setState(() => _isBuyNowLoading = true);
+    await Future.delayed(const Duration(milliseconds: 300));
+    if (!mounted) return;
+    setState(() => _isBuyNowLoading = false);
+
+    final dummyCartItem = CartItem(
+      id: 0,
+      cartId: 0,
+      productId: widget.product.id,
+      quantity: _quantity,
+      temperature: _selectedVariant?.toLowerCase(),
+      product: widget.product,
+    );
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            CheckoutPage(selectedCartItems: [dummyCartItem]),
+      ),
+    );
   }
 
   // ═══════════════════════════════════════════════
@@ -254,18 +311,17 @@ class _ProductDetailPageState extends State<ProductDetailPage>
             ),
           ),
           Positioned(
-              bottom: 0, left: 0, right: 0,
+              bottom: 0,
+              left: 0,
+              right: 0,
               child: _buildBottomBar()),
         ],
       ),
     );
   }
 
-  // ─────────────────────────────────────────────────
-  // HERO IMAGE
-  // ─────────────────────────────────────────────────
   Widget _buildHeroImage(double screenH) {
-    final url      = widget.product.imageUrl;
+    final url = widget.product.imageUrl;
     final hasImage = url != null && url.trim().isNotEmpty;
 
     return FadeTransition(
@@ -277,17 +333,22 @@ class _ProductDetailPageState extends State<ProductDetailPage>
           fit: StackFit.expand,
           children: [
             if (hasImage)
+              // ✅ CachedNetworkImage dengan cacheKey dan URL yang menyertakan
+              // versi updatedAt — cache otomatis invalid setelah produk diedit
               CachedNetworkImage(
-                imageUrl: url,
+                imageUrl: _buildImageUrl(url),
                 fit: BoxFit.cover,
-                cacheKey: 'product_${widget.product.id}',
+                cacheKey: _buildCacheKey(),
                 placeholder: (_, __) => _buildImageShimmer(),
                 errorWidget: (_, __, ___) => _buildImageFallback(),
               )
             else
               _buildImageFallback(),
             Positioned(
-              bottom: 0, left: 0, right: 0, height: 140,
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: 140,
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -303,8 +364,7 @@ class _ProductDetailPageState extends State<ProductDetailPage>
               ),
             ),
             Positioned(
-                bottom: 24, right: 20,
-                child: _buildStockBadge()),
+                bottom: 24, right: 20, child: _buildStockBadge()),
           ],
         ),
       ),
@@ -325,7 +385,8 @@ class _ProductDetailPageState extends State<ProductDetailPage>
           const SizedBox(height: 8),
           Text('Foto belum tersedia',
               style: GoogleFonts.poppins(
-                  fontSize: 12, color: Colors.brown.withOpacity(0.35))),
+                  fontSize: 12,
+                  color: Colors.brown.withOpacity(0.35))),
         ],
       ),
     );
@@ -371,9 +432,6 @@ class _ProductDetailPageState extends State<ProductDetailPage>
     );
   }
 
-  // ─────────────────────────────────────────────────
-  // DETAIL SHEET
-  // ─────────────────────────────────────────────────
   Widget _buildDetailSheet() {
     return Container(
       decoration: const BoxDecoration(color: Color(0xFFF7F2EA)),
@@ -382,7 +440,6 @@ class _ProductDetailPageState extends State<ProductDetailPage>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Nama & harga
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -419,7 +476,9 @@ class _ProductDetailPageState extends State<ProductDetailPage>
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                          _selectedVariant == 'Hot' ? '☕ Panas' : '🧊 Dingin',
+                          _selectedVariant == 'Hot'
+                              ? '☕ Panas'
+                              : '🧊 Dingin',
                           style: GoogleFonts.poppins(
                             fontSize: 10.5,
                             fontWeight: FontWeight.w600,
@@ -433,10 +492,7 @@ class _ProductDetailPageState extends State<ProductDetailPage>
                 ),
               ],
             ),
-
             const SizedBox(height: 20),
-
-            // Deskripsi
             _buildCardSection(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -449,7 +505,8 @@ class _ProductDetailPageState extends State<ProductDetailPage>
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    widget.product.description ?? 'Tidak ada deskripsi tersedia.',
+                    widget.product.description ??
+                        'Tidak ada deskripsi tersedia.',
                     style: GoogleFonts.poppins(
                         fontSize: 13.5,
                         color: Colors.grey.shade600,
@@ -458,58 +515,51 @@ class _ProductDetailPageState extends State<ProductDetailPage>
                 ],
               ),
             ),
-
             const SizedBox(height: 14),
-
-            // Pilih suhu (hanya jika ada priceCold)
             if (widget.product.priceCold != null) ...[
-  _buildCardSection(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _sectionHeader(
-          icon: Icons.thermostat_rounded,
-          label: "Pilih Suhu",
-          iconBg: Colors.orange.withOpacity(0.1),
-          iconColor: Colors.orange.shade700,
-        ),
-        const SizedBox(height: 12),
-        // Gunakan Column agar pilihan atas-bawah (lebih hemat tempat samping)
-        // atau tetap Row jika ingin bersebelahan tapi lebih tipis.
-        Row(
-          children: [
-            Expanded(
-              child: _buildTempOption(
-                variant: 'Hot',
-                label: 'Hot',
-                emoji: '☕',
-                price: widget.product.price,
-                accentColor: Colors.orange.shade700,
-                isSelected: _selectedVariant == 'Hot',
-                onTap: () => _selectVariant('Hot'),
+              _buildCardSection(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _sectionHeader(
+                      icon: Icons.thermostat_rounded,
+                      label: "Pilih Suhu",
+                      iconBg: Colors.orange.withOpacity(0.1),
+                      iconColor: Colors.orange.shade700,
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildTempOption(
+                            variant: 'Hot',
+                            label: 'Hot',
+                            emoji: '☕',
+                            price: widget.product.price,
+                            accentColor: Colors.orange.shade700,
+                            isSelected: _selectedVariant == 'Hot',
+                            onTap: () => _selectVariant('Hot'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _buildTempOption(
+                            variant: 'Cold',
+                            label: 'Cold',
+                            emoji: '🧊',
+                            price: widget.product.priceCold!,
+                            accentColor: Colors.blue.shade600,
+                            isSelected: _selectedVariant == 'Cold',
+                            onTap: () => _selectVariant('Cold'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildTempOption(
-                variant: 'Cold',
-                label: 'Cold',
-                emoji: '🧊',
-                price: widget.product.priceCold!,
-                accentColor: Colors.blue.shade600,
-                isSelected: _selectedVariant == 'Cold',
-                onTap: () => _selectVariant('Cold'),
-              ),
-            ),
-          ],
-        ),
-      ],
-    ),
-  ),
-  const SizedBox(height: 14),
-],
-
-            // Jumlah
+              const SizedBox(height: 14),
+            ],
             _buildCardSection(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -547,8 +597,8 @@ class _ProductDetailPageState extends State<ProductDetailPage>
                             color: const Color(0xFFF7F2EA),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                                color:
-                                    AppColors.primaryGreen.withOpacity(0.4),
+                                color: AppColors.primaryGreen
+                                    .withOpacity(0.4),
                                 width: 1.5),
                           ),
                           child: TextField(
@@ -587,75 +637,75 @@ class _ProductDetailPageState extends State<ProductDetailPage>
     );
   }
 
-  // ─────────────────────────────────────────────────
-  // TEMPERATURE OPTION CARD
-  // ─────────────────────────────────────────────────
   Widget _buildTempOption({
-  required String variant,
-  required String label,
-  required String emoji,
-  required double price,
-  required Color accentColor,
-  required bool isSelected,
-  required VoidCallback onTap,
-}) {
-  return GestureDetector(
-    onTap: onTap,
-    child: AnimatedContainer(
-      duration: const Duration(milliseconds: 250),
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-      decoration: BoxDecoration(
-        color: isSelected ? accentColor.withOpacity(0.1) : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isSelected ? accentColor : Colors.grey.shade300,
-          width: isSelected ? 2 : 1,
+    required String variant,
+    required String label,
+    required String emoji,
+    required double price,
+    required Color accentColor,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        padding:
+            const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+        decoration: BoxDecoration(
+          color:
+              isSelected ? accentColor.withOpacity(0.1) : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? accentColor : Colors.grey.shade300,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 18)),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: isSelected ? accentColor : Colors.black87,
+                  ),
+                ),
+                Text(
+                  _formatPrice(price),
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ),
+            const Spacer(),
+            if (isSelected)
+              Icon(Icons.check_circle, size: 18, color: accentColor)
+            else
+              Icon(Icons.circle_outlined,
+                  size: 18, color: Colors.grey.shade300),
+          ],
         ),
       ),
-      child: Row( // Ubah ke Row agar lebih compact
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(emoji, style: const TextStyle(fontSize: 18)),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                label,
-                style: GoogleFonts.poppins(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: isSelected ? accentColor : Colors.black87,
-                ),
-              ),
-              Text(
-                _formatPrice(price),
-                style: GoogleFonts.poppins(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.grey.shade600,
-                ),
-              ),
-            ],
-          ),
-          const Spacer(),
-          if (isSelected)
-            Icon(Icons.check_circle, size: 18, color: accentColor)
-          else
-            Icon(Icons.circle_outlined, size: 18, color: Colors.grey.shade300),
-        ],
-      ),
-    ),
-  );
-}
+    );
+  }
 
-  // ─────────────────────────────────────────────────
-  // BOTTOM BAR
-  // ─────────────────────────────────────────────────
   Widget _buildBottomBar() {
     final bool needsVariant =
         widget.product.priceCold != null && _selectedVariant == null;
+    final bool isOutOfStock = widget.product.stock <= 0;
+    final bool disableActions =
+        (_isLoading || _isBuyNowLoading || needsVariant || isOutOfStock);
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
@@ -667,102 +717,178 @@ class _ProductDetailPageState extends State<ProductDetailPage>
               blurRadius: 20,
               offset: const Offset(0, -4))
         ],
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius:
+            const BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Row(
             children: [
-              Text("Total Harga",
-                  style: GoogleFonts.poppins(
-                      fontSize: 11, color: Colors.grey.shade500)),
-              Text(
-                _formatPrice(_selectedPrice * _quantity),
-                style: GoogleFonts.poppins(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF1A1A1A)),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("Total Harga",
+                      style: GoogleFonts.poppins(
+                          fontSize: 11, color: Colors.grey.shade500)),
+                  Text(
+                      _formatPrice(_selectedPrice * _quantity),
+                      style: GoogleFonts.poppins(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF1A1A1A))),
+                ],
               ),
+              const Spacer(),
+              if (isOutOfStock)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                      color: Colors.red.shade100,
+                      borderRadius: BorderRadius.circular(20)),
+                  child: Text("Stok Habis",
+                      style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.red.shade700)),
+                ),
             ],
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: ScaleTransition(
-              scale: _btnScale,
-              child: GestureDetector(
-                onTap: (_isLoading || needsVariant) ? null : _addToCart,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  height: 52,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: (_isLoading || needsVariant)
-                          ? [Colors.grey.shade400, Colors.grey.shade400]
-                          : [
-                              AppColors.primaryGreen,
-                              Color.fromARGB(
-                                255,
-                                (AppColors.primaryGreen.red * 0.8).toInt(),
-                                (AppColors.primaryGreen.green * 0.9).toInt(),
-                                (AppColors.primaryGreen.blue * 0.85).toInt(),
-                              ),
-                            ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: (_isLoading || needsVariant)
-                        ? []
-                        : [
-                            BoxShadow(
-                              color: AppColors.primaryGreen.withOpacity(0.4),
-                              blurRadius: 14,
-                              offset: const Offset(0, 5),
-                            ),
-                          ],
-                  ),
-                  child: Center(
-                    child: _isLoading
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2.5, color: Colors.white))
-                        : Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(Icons.add_shopping_cart_rounded,
-                                  color: Colors.white, size: 20),
-                              const SizedBox(width: 8),
-                              Text(
-                                needsVariant
-                                    ? "Pilih Suhu Terlebih Dahulu"
-                                    : widget.isLoggedIn
-                                        ? "Tambah ke Keranjang"
-                                        : "Login untuk Memesan",
-                                style: GoogleFonts.poppins(
-                                  fontSize: needsVariant ? 12 : 14,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
+          const SizedBox(height: 12),
+          if (!isOutOfStock && !needsVariant) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: ScaleTransition(
+                    scale: _btnScale,
+                    child: GestureDetector(
+                      onTap: disableActions ? null : _addToCart,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        height: 48,
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                              color: AppColors.primaryGreen, width: 1.5),
+                          borderRadius: BorderRadius.circular(16),
+                          color: Colors.white,
+                        ),
+                        child: Center(
+                          child: _isLoading
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation(
+                                          AppColors.primaryGreen)))
+                              : Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                        Icons.add_shopping_cart_rounded,
+                                        color: AppColors.primaryGreen,
+                                        size: 18),
+                                    const SizedBox(width: 6),
+                                    Text("Tambahkan",
+                                        style: GoogleFonts.poppins(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            color:
+                                                AppColors.primaryGreen)),
+                                  ],
                                 ),
-                              ),
-                            ],
-                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ScaleTransition(
+                    scale: _btnScale,
+                    child: GestureDetector(
+                      onTap: disableActions ? null : _buyNow,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        height: 48,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(colors: [
+                            AppColors.primaryGreen,
+                            AppColors.primaryGreen.withOpacity(0.85)
+                          ]),
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                                color: AppColors.primaryGreen
+                                    .withOpacity(0.4),
+                                blurRadius: 14,
+                                offset: const Offset(0, 5))
+                          ],
+                        ),
+                        child: Center(
+                          child: _isBuyNowLoading
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      color: Colors.white))
+                              : Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(Icons.flash_on_rounded,
+                                        color: Colors.white, size: 18),
+                                    const SizedBox(width: 6),
+                                    Text("Beli Sekarang",
+                                        style: GoogleFonts.poppins(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.white)),
+                                  ],
+                                ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ] else if (needsVariant) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(16)),
+              child: Center(
+                child: Text("Pilih suhu terlebih dahulu",
+                    style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        color: Colors.orange.shade700)),
               ),
             ),
-          ),
+          ] else if (isOutOfStock) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(16)),
+              child: Center(
+                child: Text("Stok habis, tidak dapat dipesan",
+                    style: GoogleFonts.poppins(
+                        fontSize: 13, color: Colors.grey.shade600)),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  // ─────────────────────────────────────────────────
-  // SHARED WIDGETS
-  // ─────────────────────────────────────────────────
   Widget _buildCardSection({required Widget child}) {
     return Container(
       width: double.infinity,
@@ -816,8 +942,8 @@ class _ProductDetailPageState extends State<ProductDetailPage>
         decoration: BoxDecoration(
           color: Colors.black.withOpacity(0.35),
           shape: BoxShape.circle,
-          border:
-              Border.all(color: Colors.white.withOpacity(0.25), width: 1),
+          border: Border.all(
+              color: Colors.white.withOpacity(0.25), width: 1),
         ),
         child: Icon(icon, color: Colors.white, size: 18),
       ),
@@ -864,7 +990,9 @@ class _ShimmerBox extends StatefulWidget {
   final double borderRadius;
 
   const _ShimmerBox(
-      {required this.width, required this.height, this.borderRadius = 8});
+      {required this.width,
+      required this.height,
+      this.borderRadius = 8});
 
   @override
   State<_ShimmerBox> createState() => _ShimmerBoxState();
@@ -879,7 +1007,8 @@ class _ShimmerBoxState extends State<_ShimmerBox>
   void initState() {
     super.initState();
     _ctrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1100))
+        vsync: this,
+        duration: const Duration(milliseconds: 1100))
       ..repeat(reverse: true);
     _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut);
   }

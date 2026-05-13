@@ -7,7 +7,7 @@ class CartItem {
   final int cartId;
   final int productId;
   int quantity;
-  final String? temperature;    // ← BARU: 'Hot', 'Cold', atau null
+  final String? temperature;
   final Product product;
 
   CartItem({
@@ -21,24 +21,32 @@ class CartItem {
 
   factory CartItem.fromJson(Map<String, dynamic> json) {
     return CartItem(
-      id:        json['id'],
-      cartId:    json['cart_id'],
-      productId: json['product_id'],
-      quantity:  json['quantity'],
-      temperature: json['temperature'],           // ← BARU
-      product:   Product.fromJson(json['product']),
+      id:          json['id'],
+      cartId:      json['cart_id'],
+      productId:   json['product_id'],
+      quantity:    json['quantity'],
+      temperature: json['temperature'],
+      product:     Product.fromJson(json['product']),
     );
   }
 
-  // Helper untuk label yang ditampilkan di UI keranjang
+  /// ✅ Harga efektif berdasarkan suhu yang dipilih
+  double get effectivePrice {
+    final t = temperature?.toLowerCase();
+    if (t == 'cold' && product.priceCold != null) {
+      return product.priceCold!;
+    }
+    return product.price; // hot atau null → harga normal
+  }
+
+  /// ✅ Subtotal item ini
+  double get subtotal => effectivePrice * quantity;
+
   String get variantLabel {
     if (temperature == null || temperature!.isEmpty) return '';
-    
-    // Sesuaikan dengan data dari Laravel (biasanya huruf kecil 'hot'/'cold')
     final t = temperature!.toLowerCase();
     if (t == 'hot')  return '☕ Panas';
     if (t == 'cold') return '🧊 Dingin';
-    
     return temperature!;
   }
 }

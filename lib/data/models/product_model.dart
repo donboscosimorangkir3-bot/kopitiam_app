@@ -3,7 +3,7 @@ import 'package:kopitiam_app/data/models/category_model.dart';
 
 class Product {
   final int id;
-  final int category_id; // <-- TAMBAHKAN INI
+  final int category_id;
   final String name;
   final String? description;
   final double price;
@@ -11,10 +11,11 @@ class Product {
   final String? imageUrl;
   final int stock;
   final Category? category;
+  final String? updatedAt; // TAMBAH INI
 
   Product({
     required this.id,
-    required this.category_id, // <-- TAMBAHKAN INI
+    required this.category_id,
     required this.name,
     this.description,
     required this.price,
@@ -22,12 +23,13 @@ class Product {
     this.imageUrl,
     required this.stock,
     this.category,
+    this.updatedAt, // TAMBAH INI
   });
 
   factory Product.fromJson(Map<String, dynamic> json) {
     return Product(
       id: json['id'],
-      category_id: json['category_id'], // <-- TAMBAHKAN INI
+      category_id: json['category_id'],
       name: json['name'],
       description: json['description'],
       price: double.parse(json['price'].toString()),
@@ -36,8 +38,10 @@ class Product {
           : null,
       imageUrl: json['image_url'],
       stock: json['stock'],
-category: json['category'] != null
-          ? Category.fromJson(json['category']) // <-- UBAH DI SINI
-          : null,    );
+      category: json['category'] != null
+          ? Category.fromJson(json['category'])
+          : null,
+      updatedAt: json['updated_at'], // TAMBAH INI
+    );
   }
 }

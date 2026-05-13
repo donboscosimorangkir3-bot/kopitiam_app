@@ -1,7 +1,7 @@
 class ApiConstants {
   // Jika pakai Emulator Android, gunakan 10.0.2.2
   // Jika pakai HP Fisik, gunakan IP Laptop (misal: 192.168.1.10)
-static const String baseUrl = 'http://127.0.0.1:8000/api';
+static const String baseUrl = 'http://10.43.144.213:8000/api';
   
   // Endpoint Auth
   static const String login = '$baseUrl/login';
@@ -10,7 +10,9 @@ static const String baseUrl = 'http://127.0.0.1:8000/api';
   
   // Endpoint Data
   static const String products = '$baseUrl/products';
+  static const String buyNow = '$baseUrl/orders/buy-now';
   static const String categories = '$baseUrl/categories';
   static const String cart = '$baseUrl/cart';
   static const String checkout = '$baseUrl/checkout';
+  static const String orders = '$baseUrl/orders';
 }

@@ -15,7 +15,9 @@ import 'package:kopitiam_app/data/models/table_model.dart';
 import 'package:kopitiam_app/data/datasources/table_remote_datasource.dart';
 
 class CheckoutPage extends StatefulWidget {
-  const CheckoutPage({super.key});
+  final List<CartItem>? selectedCartItems;
+
+  const CheckoutPage({super.key, this.selectedCartItems});
 
   @override
   State<CheckoutPage> createState() => _CheckoutPageState();
@@ -24,13 +26,12 @@ class CheckoutPage extends StatefulWidget {
 class _CheckoutPageState extends State<CheckoutPage>
     with SingleTickerProviderStateMixin {
   String _paymentMethod = 'cash_on_pickup';
-  String _orderType = 'pickup'; // 'pickup' | 'dine-in'
-  // --- TAMBAHAN BAGIAN MEJA ---
-  List<TableModel> _tables = []; // Penampung list meja dari API
-  String? _selectedTableNumber;  // Penampung pilihan user
+  String _orderType = 'pickup';
+  List<TableModel> _tables = [];
+  String? _selectedTableNumber;
 
   bool _isLoading = false;
-  late Future<List<CartItem>> _cartItemsFuture;
+  late List<CartItem> _cartItems = [];
 
   late AnimationController _animController;
   late Animation<double> _fadeAnim;
@@ -56,17 +57,37 @@ class _CheckoutPageState extends State<CheckoutPage>
       curve: Curves.easeOutCubic,
     ));
 
-    _fetchCartItems();
+    _initializeCartItems();
     _fetchTables();
   }
 
-  // --- FUNGSI AMBIL DATA MEJA ---
+  void _initializeCartItems() {
+    if (widget.selectedCartItems != null && widget.selectedCartItems!.isNotEmpty) {
+      _cartItems = widget.selectedCartItems!;
+    } else {
+      _fetchAllCartItems();
+    }
+    _animController.forward(from: 0);
+  }
+
+  Future<void> _fetchAllCartItems() async {
+    try {
+      final items = await CartRemoteDatasource().getCartItems();
+      if (mounted) {
+        setState(() {
+          _cartItems = items;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching cart items: $e");
+    }
+  }
+
   Future<void> _fetchTables() async {
     try {
       final tables = await TableRemoteDatasource().getTables();
       if (mounted) {
         setState(() {
-          // Hanya ambil meja yang statusnya tersedia (isAvailable)
           _tables = tables.where((t) => t.isAvailable).toList();
         });
       }
@@ -78,15 +99,7 @@ class _CheckoutPageState extends State<CheckoutPage>
   @override
   void dispose() {
     _animController.dispose();
-    
     super.dispose();
-  }
-
-  Future<void> _fetchCartItems() async {
-    setState(() {
-      _cartItemsFuture = CartRemoteDatasource().getCartItems();
-    });
-    _animController.forward(from: 0);
   }
 
   String _formatPrice(double price) {
@@ -97,12 +110,23 @@ class _CheckoutPageState extends State<CheckoutPage>
     ).format(price);
   }
 
-  // ─── Proses Checkout ────────────────────────────
+  double get _subtotal {
+  double total = 0;
+  for (var item in _cartItems) {
+    total += item.effectivePrice * item.quantity; // ✅ bukan item.product.price
+  }
+  return total;
+}
+
   void _processCheckout() async {
-    // Validasi nomor meja menggunakan variabel _selectedTableNumber
     if (_orderType == 'dine-in' && _selectedTableNumber == null) {
-    _showSnackBar("Silakan pilih nomor meja terlebih dahulu!", isError: true);
-    return;
+      _showSnackBar("Silakan pilih nomor meja terlebih dahulu!", isError: true);
+      return;
+    }
+
+    if (_cartItems.isEmpty) {
+      _showSnackBar("Tidak ada item untuk di-checkout!", isError: true);
+      return;
     }
 
     setState(() => _isLoading = true);
@@ -118,19 +142,34 @@ class _CheckoutPageState extends State<CheckoutPage>
       return;
     }
 
+    // ✅ Deteksi alur: Beli Sekarang (id == 0) atau dari Keranjang
+    final bool isBuyNow = _cartItems.any((item) => item.id == 0);
+
+    final List<Map<String, dynamic>> itemsData = _cartItems.map((item) => {
+      'product_id': item.product.id,
+      'quantity': item.quantity,
+      'temperature': item.temperature,
+    }).toList();
+
+    final Map<String, dynamic> requestData = {
+      'shipping_address': _orderType == 'dine-in'
+          ? 'Dine In - Meja $_selectedTableNumber'
+          : 'Pickup di Kopitiam33',
+      'payment_method': _paymentMethod,
+      'order_type': _orderType,
+      'table_number': _orderType == 'dine-in' ? _selectedTableNumber : null,
+      'items': itemsData,
+    };
+
+    // ✅ Hanya kirim cart_item_ids jika dari keranjang (bukan Beli Sekarang)
+    if (!isBuyNow) {
+      requestData['cart_item_ids'] = _cartItems.map((item) => item.id).toList();
+    }
+
     try {
-    final response = await dio.post(
-      ApiConstants.checkout,
-      data: {
-        'shipping_address': _orderType == 'dine-in'
-            ? 'Dine In - Meja $_selectedTableNumber' // GANTI INI
-            : 'Pickup di Kopitiam33',
-        'payment_method': _paymentMethod,
-        'order_type': _orderType,
-        'table_number': _orderType == 'dine-in'
-            ? _selectedTableNumber // GANTI INI
-            : null,
-      },
+      final response = await dio.post(
+        ApiConstants.checkout,
+        data: requestData,
         options: Options(
           headers: {
             'Accept': 'application/json',
@@ -202,7 +241,8 @@ class _CheckoutPageState extends State<CheckoutPage>
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 72, height: 72,
+                width: 72,
+                height: 72,
                 decoration: BoxDecoration(
                   color: AppColors.primaryGreen.withOpacity(0.1),
                   shape: BoxShape.circle,
@@ -211,15 +251,25 @@ class _CheckoutPageState extends State<CheckoutPage>
                     size: 40, color: AppColors.primaryGreen),
               ),
               const SizedBox(height: 16),
-              Text("Pesanan Berhasil!",
-                style: GoogleFonts.playfairDisplay(fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFF1A1A1A))),
+              Text(
+                "Pesanan Berhasil!",
+                style: GoogleFonts.playfairDisplay(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF1A1A1A),
+                ),
+              ),
               const SizedBox(height: 8),
               Text(
                 _orderType == 'dine-in'
-                    ? "Silahkan lakukan pembayaran di kasir.\nLalu silakan tunggu di Meja $_selectedTableNumber."
-                    : "Silahkan lakukan pembayaran di kasir.\nSilakan ambil di meja Kasir.",
+                    ? "Pesananmu sedang disiapkan.\nSilakan tunggu di Meja $_selectedTableNumber."
+                    : "Pesananmu sedang disiapkan.\nSilakan ambil di Kopitiam33.",
                 textAlign: TextAlign.center,
-                style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey.shade500, height: 1.6),
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  color: Colors.grey.shade500,
+                  height: 1.6,
+                ),
               ),
               const SizedBox(height: 24),
               GestureDetector(
@@ -279,88 +329,54 @@ class _CheckoutPageState extends State<CheckoutPage>
         children: [
           _buildHeader(),
           Expanded(
-            child: FutureBuilder<List<CartItem>>(
-              future: _cartItemsFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: CircularProgressIndicator(
-                      color: AppColors.primaryGreen,
-                      strokeWidth: 2.5,
-                    ),
-                  );
-                }
-                if (snapshot.hasError) {
-                  return _buildErrorState();
-                }
-                if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return _buildEmptyState();
-                }
-
-                final cartItems = snapshot.data!;
-                double subtotal = 0;
-                for (var item in cartItems) {
-                  subtotal += item.product.price * item.quantity;
-                }
-
-                return FadeTransition(
-                  opacity: _fadeAnim,
-                  child: SlideTransition(
-                    position: _slideAnim,
-                    child: Column(
-                      children: [
-                        Expanded(
-                          child: SingleChildScrollView(
-                            physics: const BouncingScrollPhysics(),
-                            padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // ── RINGKASAN PESANAN ──
-                                _buildSectionTitle(
-                                  icon: Icons.receipt_long_rounded,
-                                  title: "Ringkasan Pesanan",
-                                  iconColor: Colors.orange.shade700,
-                                ),
-                                const SizedBox(height: 12),
-                                _buildOrderSummaryCard(cartItems, subtotal),
-
-                                const SizedBox(height: 20),
-
-                                // ── METODE PENGAMBILAN ──
-                                _buildSectionTitle(
-                                  icon: Icons.store_rounded,
-                                  title: "Metode Pengambilan",
-                                  iconColor: Colors.teal,
-                                ),
-                                const SizedBox(height: 12),
-                                _buildOrderTypeSection(),
-
-                                const SizedBox(height: 20),
-
-                                // ── METODE PEMBAYARAN ──
-                                _buildSectionTitle(
-                                  icon: Icons.payment_rounded,
-                                  title: "Metode Pembayaran",
-                                  iconColor: Colors.purple.shade400,
-                                ),
-                                const SizedBox(height: 12),
-                                _buildPaymentCard(),
-
-                                const SizedBox(height: 8),
-                              ],
+            child: _cartItems.isEmpty
+                ? _buildEmptyState()
+                : FadeTransition(
+                    opacity: _fadeAnim,
+                    child: SlideTransition(
+                      position: _slideAnim,
+                      child: Column(
+                        children: [
+                          Expanded(
+                            child: SingleChildScrollView(
+                              physics: const BouncingScrollPhysics(),
+                              padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildSectionTitle(
+                                    icon: Icons.receipt_long_rounded,
+                                    title: "Ringkasan Pesanan",
+                                    iconColor: Colors.orange.shade700,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  _buildOrderSummaryCard(_cartItems, _subtotal),
+                                  const SizedBox(height: 20),
+                                  _buildSectionTitle(
+                                    icon: Icons.store_rounded,
+                                    title: "Metode Pengambilan",
+                                    iconColor: Colors.teal,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  _buildOrderTypeSection(),
+                                  const SizedBox(height: 20),
+                                  _buildSectionTitle(
+                                    icon: Icons.payment_rounded,
+                                    title: "Metode Pembayaran",
+                                    iconColor: Colors.purple.shade400,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  _buildPaymentCard(),
+                                  const SizedBox(height: 8),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-
-                        // ── BOTTOM BAR ──
-                        _buildBottomBar(subtotal),
-                      ],
+                          _buildBottomBar(_subtotal),
+                        ],
+                      ),
                     ),
                   ),
-                );
-              },
-            ),
           ),
         ],
       ),
@@ -432,9 +448,6 @@ class _CheckoutPageState extends State<CheckoutPage>
     );
   }
 
-  // ─────────────────────────────────────────────────
-  // SECTION TITLE
-  // ─────────────────────────────────────────────────
   Widget _buildSectionTitle({
     required IconData icon,
     required String title,
@@ -464,9 +477,6 @@ class _CheckoutPageState extends State<CheckoutPage>
     );
   }
 
-  // ─────────────────────────────────────────────────
-  // ORDER SUMMARY CARD
-  // ─────────────────────────────────────────────────
   Widget _buildOrderSummaryCard(List<CartItem> cartItems, double subtotal) {
     return Container(
       decoration: BoxDecoration(
@@ -482,7 +492,6 @@ class _CheckoutPageState extends State<CheckoutPage>
       ),
       child: Column(
         children: [
-          // List item
           ...cartItems.asMap().entries.map((entry) {
             final index = entry.key;
             final item = entry.value;
@@ -491,11 +500,9 @@ class _CheckoutPageState extends State<CheckoutPage>
             return Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   child: Row(
                     children: [
-                      // Qty badge
                       Container(
                         width: 28,
                         height: 28,
@@ -529,13 +536,13 @@ class _CheckoutPageState extends State<CheckoutPage>
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        _formatPrice(item.product.price * item.quantity),
-                        style: GoogleFonts.poppins(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF1A1A1A),
-                        ),
-                      ),
+                      _formatPrice(item.effectivePrice * item.quantity),
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF1A1A1A),
+                    ),
+                  ),
                     ],
                   ),
                 ),
@@ -550,14 +557,11 @@ class _CheckoutPageState extends State<CheckoutPage>
               ],
             );
           }),
-
-          // Total row
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
               color: AppColors.primaryGreen.withOpacity(0.06),
-              borderRadius: const BorderRadius.vertical(
-                  bottom: Radius.circular(18)),
+              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(18)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -587,7 +591,7 @@ class _CheckoutPageState extends State<CheckoutPage>
   }
 
   // ─────────────────────────────────────────────────
-  // ORDER TYPE SECTION (Pickup / Dine In)
+  // ORDER TYPE SECTION
   // ─────────────────────────────────────────────────
   Widget _buildOrderTypeSection() {
     return Column(
@@ -603,7 +607,7 @@ class _CheckoutPageState extends State<CheckoutPage>
                 isSelected: _orderType == 'pickup',
                 onTap: () => setState(() {
                   _orderType = 'pickup';
-                  _selectedTableNumber = null; // Reset pilihan meja
+                  _selectedTableNumber = null;
                 }),
               ),
             ),
@@ -620,8 +624,6 @@ class _CheckoutPageState extends State<CheckoutPage>
             ),
           ],
         ),
-
-        // ── Input Nomor Meja (animasi muncul/hilang) ──
         AnimatedCrossFade(
           duration: const Duration(milliseconds: 280),
           crossFadeState: _orderType == 'dine-in'
@@ -637,48 +639,54 @@ class _CheckoutPageState extends State<CheckoutPage>
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: Colors.orange.shade300, width: 1.5),
                 boxShadow: [
-                  BoxShadow(color: Colors.orange.withOpacity(0.1), blurRadius: 12, offset: const Offset(0, 4)),
+                  BoxShadow(
+                    color: Colors.orange.withOpacity(0.1),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
                 ],
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButtonFormField<String>(
                   value: _selectedTableNumber,
                   isExpanded: true,
-                  hint: Text("Pilih Nomor Meja", style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey.shade400)),
-                  icon: Icon(Icons.keyboard_arrow_down_rounded, color: Colors.orange.shade600),
+                  hint: Text(
+                    "Pilih Nomor Meja",
+                    style: GoogleFonts.poppins(
+                        fontSize: 13, color: Colors.grey.shade400),
+                  ),
+                  icon: Icon(Icons.keyboard_arrow_down_rounded,
+                      color: Colors.orange.shade600),
                   decoration: InputDecoration(
                     border: InputBorder.none,
-                    prefixIcon: Icon(Icons.table_restaurant_rounded, color: Colors.orange.shade600, size: 20),
+                    prefixIcon: Icon(Icons.table_restaurant_rounded,
+                        color: Colors.orange.shade600, size: 20),
                     prefixIconConstraints: const BoxConstraints(minWidth: 40),
                   ),
                   items: _tables.map((table) {
                     return DropdownMenuItem<String>(
                       value: table.number,
-                      child: Text("Meja Nomor ${table.number}", style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600)),
+                      child: Text(
+                        "Meja Nomor ${table.number}",
+                        style: GoogleFonts.poppins(
+                            fontSize: 14, fontWeight: FontWeight.w600),
+                      ),
                     );
                   }).toList(),
                   onChanged: (value) {
-                    setState(() {
-                      _selectedTableNumber = value;
-                    });
+                    setState(() => _selectedTableNumber = value);
                   },
                 ),
               ),
             ),
           ),
         ),
-
-        const SizedBox(height: 10),
-
-        // ── Info strip sesuai pilihan ──
         const SizedBox(height: 10),
         Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: (_orderType == 'dine-in'
-                    ? Colors.orange
-                    : Colors.teal)
+            color: (_orderType == 'dine-in' ? Colors.orange : Colors.teal)
                 .withOpacity(0.07),
             borderRadius: BorderRadius.circular(12),
           ),
@@ -763,8 +771,7 @@ class _CheckoutPageState extends State<CheckoutPage>
                 shape: BoxShape.circle,
               ),
               child: Icon(icon,
-                  color: isSelected ? color : Colors.grey.shade400,
-                  size: 22),
+                  color: isSelected ? color : Colors.grey.shade400, size: 22),
             ),
             const SizedBox(height: 8),
             Text(
@@ -772,89 +779,18 @@ class _CheckoutPageState extends State<CheckoutPage>
               style: GoogleFonts.poppins(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
-                color:
-                    isSelected ? color : Colors.grey.shade600,
+                color: isSelected ? color : Colors.grey.shade600,
               ),
             ),
             Text(
               sublabel,
               style: GoogleFonts.poppins(
                 fontSize: 10.5,
-                color: isSelected
-                    ? color.withOpacity(0.8)
-                    : Colors.grey.shade400,
+                color: isSelected ? color.withOpacity(0.8) : Colors.grey.shade400,
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  // ─────────────────────────────────────────────────
-  // PICKUP CARD (kept for reference, replaced by _buildOrderTypeSection)
-  // ─────────────────────────────────────────────────
-  Widget _buildPickupCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: Colors.teal.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Icon(Icons.storefront_rounded,
-                color: Colors.teal.shade600, size: 24),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "Ambil di Kafe (Pickup)",
-                  style: GoogleFonts.poppins(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFF1A1A1A),
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  "Pesanan disiapkan untuk diambil\nlangsung di Kopitiam33",
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    color: Colors.grey.shade500,
-                    height: 1.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: Colors.teal.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(Icons.check_rounded,
-                color: Colors.teal.shade600, size: 16),
-          ),
-        ],
       ),
     );
   }
@@ -924,7 +860,6 @@ class _CheckoutPageState extends State<CheckoutPage>
                 ],
               ),
             ),
-            // Radio indicator
             AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               width: 22,
@@ -942,8 +877,7 @@ class _CheckoutPageState extends State<CheckoutPage>
                     : Colors.transparent,
               ),
               child: _paymentMethod == 'cash_on_pickup'
-                  ? const Icon(Icons.check_rounded,
-                      color: Colors.white, size: 13)
+                  ? const Icon(Icons.check_rounded, color: Colors.white, size: 13)
                   : null,
             ),
           ],
@@ -1057,7 +991,7 @@ class _CheckoutPageState extends State<CheckoutPage>
   }
 
   // ─────────────────────────────────────────────────
-  // EMPTY & ERROR STATE
+  // EMPTY STATE
   // ─────────────────────────────────────────────────
   Widget _buildEmptyState() {
     return Center(
@@ -1074,12 +1008,11 @@ class _CheckoutPageState extends State<CheckoutPage>
                 shape: BoxShape.circle,
               ),
               child: Icon(Icons.shopping_bag_outlined,
-                  size: 38,
-                  color: AppColors.primaryGreen.withOpacity(0.6)),
+                  size: 38, color: AppColors.primaryGreen.withOpacity(0.6)),
             ),
             const SizedBox(height: 16),
             Text(
-              "Keranjang Kosong",
+              "Tidak Ada Item Dipilih",
               style: GoogleFonts.playfairDisplay(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -1088,7 +1021,7 @@ class _CheckoutPageState extends State<CheckoutPage>
             ),
             const SizedBox(height: 8),
             Text(
-              "Tidak ada item untuk di-checkout.",
+              "Silakan pilih item dari keranjang terlebih dahulu.",
               textAlign: TextAlign.center,
               style: GoogleFonts.poppins(
                 fontSize: 13,
@@ -1099,8 +1032,7 @@ class _CheckoutPageState extends State<CheckoutPage>
             GestureDetector(
               onTap: () => Navigator.pop(context),
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 24, vertical: 13),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 13),
                 decoration: BoxDecoration(
                   color: AppColors.primaryGreen,
                   borderRadius: BorderRadius.circular(14),
@@ -1113,69 +1045,7 @@ class _CheckoutPageState extends State<CheckoutPage>
                   ],
                 ),
                 child: Text(
-                  "Kembali",
-                  style: GoogleFonts.poppins(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildErrorState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 40),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.08),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.wifi_off_rounded,
-                  size: 38, color: Colors.redAccent),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              "Gagal Memuat",
-              style: GoogleFonts.playfairDisplay(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: const Color(0xFF1A1A1A),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              "Periksa koneksi internetmu\nlalu coba lagi.",
-              textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(
-                fontSize: 13,
-                color: Colors.grey.shade500,
-                height: 1.6,
-              ),
-            ),
-            const SizedBox(height: 24),
-            GestureDetector(
-              onTap: _fetchCartItems,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 24, vertical: 13),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryGreen,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Text(
-                  "Coba Lagi",
+                  "Kembali ke Keranjang",
                   style: GoogleFonts.poppins(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,

@@ -507,14 +507,17 @@ class _OrderHistoryPageState extends State<OrderHistoryPage>
 
                 // Tombol detail
                 GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => OrderDetailPage(order: order),
-                      ),
-                    );
-                  },
+                  onTap: () async {
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => OrderDetailPage(order: order),
+                    ),
+                  );
+                  if (result == true && mounted) {
+                    _fetchOrders();
+                  }
+                },
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 14, vertical: 9),
