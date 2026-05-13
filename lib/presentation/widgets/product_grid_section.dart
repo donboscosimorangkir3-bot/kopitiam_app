@@ -67,8 +67,9 @@ class _ProductGridSectionState extends State<ProductGridSection> {
           ),
           backgroundColor: AppColors.primaryGreen,
           behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           margin: const EdgeInsets.fromLTRB(16, 0, 16, 90),
           duration: const Duration(seconds: 2),
         ),
@@ -115,13 +116,13 @@ class _ProductGridSectionState extends State<ProductGridSection> {
 
         // ── FILTER ──
         final products = snapshot.data!.where((p) {
-          final categoryMatch = widget.filterCategoryId == null ||
+          final categoryMatch =
+              widget.filterCategoryId == null ||
               p.category_id == widget.filterCategoryId;
-          final searchMatch = widget.searchQuery == null ||
+          final searchMatch =
+              widget.searchQuery == null ||
               widget.searchQuery!.isEmpty ||
-              p.name
-                  .toLowerCase()
-                  .contains(widget.searchQuery!.toLowerCase());
+              p.name.toLowerCase().contains(widget.searchQuery!.toLowerCase());
           return categoryMatch && searchMatch;
         }).toList();
 
@@ -201,9 +202,11 @@ class _ProductGridSectionState extends State<ProductGridSection> {
               color: AppColors.primaryGreen.withOpacity(0.08),
               shape: BoxShape.circle,
             ),
-            child: Icon(icon,
-                size: 34,
-                color: AppColors.primaryGreen.withOpacity(0.5)),
+            child: Icon(
+              icon,
+              size: 34,
+              color: AppColors.primaryGreen.withOpacity(0.5),
+            ),
           ),
           const SizedBox(height: 16),
           Text(
@@ -243,8 +246,11 @@ class _ProductGridSectionState extends State<ProductGridSection> {
               color: Colors.red.shade50,
               shape: BoxShape.circle,
             ),
-            child: Icon(Icons.wifi_off_rounded,
-                size: 30, color: Colors.red.shade300),
+            child: Icon(
+              Icons.wifi_off_rounded,
+              size: 30,
+              color: Colors.red.shade300,
+            ),
           ),
           const SizedBox(height: 14),
           Text(
@@ -267,17 +273,14 @@ class _ProductGridSectionState extends State<ProductGridSection> {
           TextButton.icon(
             onPressed: _fetchProducts,
             icon: const Icon(Icons.refresh_rounded, size: 16),
-            label: Text(
-              "Coba lagi",
-              style: GoogleFonts.poppins(fontSize: 13),
-            ),
+            label: Text("Coba lagi", style: GoogleFonts.poppins(fontSize: 13)),
             style: TextButton.styleFrom(
               foregroundColor: AppColors.primaryGreen,
               backgroundColor: AppColors.primaryGreen.withOpacity(0.08),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
           ),
         ],
@@ -335,18 +338,19 @@ class _ProductCardState extends State<_ProductCard>
   Widget _buildImage() {
     final url = widget.product.imageUrl;
 
-    if (url == null || url.trim().isEmpty) {
+    print("FINAL IMAGE URL: $url");
+
+    if (url == null || url.isEmpty) {
       return _buildImagePlaceholder(showIcon: true);
     }
 
-    return CachedNetworkImage(
-      imageUrl: url,
+    return Image.network(
+      url,
       fit: BoxFit.cover,
-      width: double.infinity,
-      height: double.infinity,
-      cacheKey: url,
-      placeholder: (context, _) => _buildImagePlaceholder(showIcon: false),
-      errorWidget: (context, _, __) => _buildImagePlaceholder(showIcon: true),
+      errorBuilder: (context, error, stackTrace) {
+        print("IMAGE LOAD ERROR: $error");
+        return _buildImagePlaceholder(showIcon: true);
+      },
     );
   }
 
@@ -400,10 +404,8 @@ class _ProductCardState extends State<_ProductCard>
       onTapCancel: () => _pressCtrl.reverse(),
       child: AnimatedBuilder(
         animation: _pressAnim,
-        builder: (_, child) => Transform.scale(
-          scale: 1.0 - _pressAnim.value,
-          child: child,
-        ),
+        builder: (_, child) =>
+            Transform.scale(scale: 1.0 - _pressAnim.value, child: child),
         child: Container(
           decoration: BoxDecoration(
             color: Colors.white,
@@ -517,8 +519,9 @@ class _ProductCardState extends State<_ProductCard>
                                 borderRadius: BorderRadius.circular(10),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: AppColors.primaryGreen
-                                        .withOpacity(0.35),
+                                    color: AppColors.primaryGreen.withOpacity(
+                                      0.35,
+                                    ),
                                     blurRadius: 8,
                                     offset: const Offset(0, 3),
                                   ),
@@ -572,8 +575,9 @@ class _SkeletonCard extends StatelessWidget {
           Expanded(
             flex: 5,
             child: ClipRRect(
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(16)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(16),
+              ),
               child: const _ShimmerBox(
                 width: double.infinity,
                 height: double.infinity,
@@ -591,11 +595,17 @@ class _SkeletonCard extends StatelessWidget {
                 children: [
                   // Nama
                   _ShimmerBox(
-                      width: double.infinity, height: 13, borderRadius: 6),
+                    width: double.infinity,
+                    height: 13,
+                    borderRadius: 6,
+                  ),
                   const SizedBox(height: 7),
                   // Deskripsi baris 1
                   _ShimmerBox(
-                      width: double.infinity, height: 10, borderRadius: 5),
+                    width: double.infinity,
+                    height: 10,
+                    borderRadius: 5,
+                  ),
                   const SizedBox(height: 5),
                   // Deskripsi baris 2
                   _ShimmerBox(width: 110, height: 10, borderRadius: 5),
