@@ -26,29 +26,60 @@ void _handleRegister() async {
   if (_nameController.text.isEmpty || _emailController.text.isEmpty ||
       _passwordController.text.isEmpty || _phoneController.text.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Semua field harus diisi!"), backgroundColor: Colors.red),
+      const SnackBar(
+        content: Text("Semua field harus diisi!"),
+        backgroundColor: Colors.red,
+      ),
     );
     return;
   }
 
   setState(() => _isLoading = true);
-  final success = await AuthRemoteDatasource().register(
-    _nameController.text, _emailController.text, _passwordController.text, _phoneController.text,
+
+  // Sekarang result adalah Map, bukan bool
+  final result = await AuthRemoteDatasource().register(
+    _nameController.text,
+    _emailController.text,
+    _passwordController.text,
+    _phoneController.text,
   );
+
   setState(() => _isLoading = false);
 
   if (!mounted) return;
 
-  if (success) {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Registrasi berhasil! Cek email.")));
-    // PINDAH KE OTP PAGE
+  if (result['success'] == true) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Registrasi berhasil! Cek email.")),
+    );
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (context) => OtpPage(email: _emailController.text)),
+      MaterialPageRoute(
+        builder: (context) => OtpPage(email: _emailController.text),
+      ),
     );
   } else {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Register gagal. Email mungkin sudah ada."), backgroundColor: Colors.red),
+    // Tampilkan pesan dari server (termasuk "Server notifikasi sedang tidak aktif...")
+    final message = result['message'] ?? 'Registrasi gagal. Coba lagi.';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text("Registrasi Gagal"),
+          ],
+        ),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("OK"),
+          ),
+        ],
+      ),
     );
   }
 }

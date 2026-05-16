@@ -12,19 +12,30 @@ class AuthRemoteDatasource {
   final Dio _dio = Dio();
 
   // REGISTER (Tetap pake logic lo, cuma return true/false)
-  Future<bool> register(String name, String email, String password, String phone) async {
-    try {
-      final response = await _dio.post(
-        '${ApiConstants.baseUrl}/register', // Sesuaikan URL lo
-        data: {'name': name, 'email': email, 'password': password, 'phone': phone},
-        options: Options(headers: {'Accept': 'application/json'}),
-      );
-      return response.statusCode == 201 || response.statusCode == 200;
-    } on DioException catch (e) {
-      print("Register Gagal: ${e.response?.data}");
-      return false;
+Future<Map<String, dynamic>> register(String name, String email, String password, String phone) async {
+  try {
+    final response = await _dio.post(
+      '${ApiConstants.baseUrl}/register',
+      data: {'name': name, 'email': email, 'password': password, 'phone': phone},
+      options: Options(headers: {'Accept': 'application/json'}),
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return {'success': true};
     }
+
+    return {'success': false, 'message': 'Registrasi gagal. Coba lagi.'};
+
+  } on DioException catch (e) {
+    // Ambil pesan dari response Laravel (503, 500, 422, dll)
+    final data = e.response?.data;
+    final message = (data is Map && data['message'] != null)
+        ? data['message']
+        : 'Registrasi gagal. Coba lagi.';
+
+    return {'success': false, 'message': message};
   }
+}
 
   // VERIFY OTP (Fungsi Baru buat OTP lo)
   Future<bool> verifyOtp(String email, String otp) async {
@@ -224,11 +235,28 @@ class AuthRemoteDatasource {
     );
   }
 
-  Future<bool> forgotPassword(String email) async {
+  Future<Map<String, dynamic>> forgotPassword(String email) async {
   try {
-    final response = await _dio.post('${ApiConstants.baseUrl}/forgot-password', data: {'email': email});
-    return response.statusCode == 200;
-  } catch (e) { return false; }
+    final response = await _dio.post(
+      '${ApiConstants.baseUrl}/forgot-password',
+      data: {'email': email},
+      options: Options(headers: {'Accept': 'application/json'}),
+    );
+
+    if (response.statusCode == 200) {
+      return {'success': true};
+    }
+
+    return {'success': false, 'message': 'Gagal mengirim OTP. Coba lagi.'};
+
+  } on DioException catch (e) {
+    final data = e.response?.data;
+    final message = (data is Map && data['message'] != null)
+        ? data['message']
+        : 'Gagal mengirim OTP. Coba lagi.';
+
+    return {'success': false, 'message': message};
+  }
 }
 
 Future<bool> resetPassword(String email, String otp, String password, String passwordConfirmation) async {

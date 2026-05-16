@@ -23,7 +23,12 @@ class SettingRemoteDatasource {
   }
 
   // Update Data (Teks + Gambar)
-  Future<bool> updateSettings(CafeSettings settings, File? imageFile) async {
+  // [deleteImage] = true → kirim sinyal ke server untuk hapus foto
+  Future<bool> updateSettings(
+    CafeSettings settings,
+    File? imageFile, {
+    bool deleteImage = false, // ← TAMBAHAN: default false, aman untuk panggilan lama
+  }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('auth_token');
@@ -37,6 +42,11 @@ class SettingRemoteDatasource {
           imageFile.path,
           filename: imageFile.path.split('/').last,
         );
+      }
+
+      // Jika tidak ada gambar baru tapi user minta hapus foto lama
+      if (imageFile == null && deleteImage) {
+        dataMap['delete_image'] = '1';
       }
 
       // Ubah Map menjadi FormData
