@@ -1,6 +1,9 @@
 // lib/presentation/pages/cafe_info_management_page.dart
-// FIX: setelah simpan, fetch ulang data dari server agar preview
-//      foto owner langsung terupdate + evict cache gambar lama
+//
+// PERUBAHAN:
+// • Banner : tombol Tambah (jika kosong) / Hapus (jika ada foto) — terpisah
+// • Form   : semua field readOnly by default; tiap field punya tombol
+//            ✏️ Edit (aktifkan inline edit) dan 🗑️ Hapus (kosongkan field)
 
 import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -13,6 +16,27 @@ import 'package:kopitiam_app/core/api_constants.dart';
 import 'package:kopitiam_app/data/models/setting_model.dart';
 import 'package:kopitiam_app/data/datasources/setting_remote_datasource.dart';
 
+// ─── Metadata per field ────────────────────────────────────────────────────
+class _FieldMeta {
+  final TextEditingController ctrl;
+  final String label;
+  final IconData icon;
+  final int maxLines;
+  final TextInputType? keyboard;
+  final String? hint;
+  bool isEditing;           // false = readOnly (terkunci)
+
+  _FieldMeta({
+    required this.ctrl,
+    required this.label,
+    required this.icon,
+    this.maxLines = 1,
+    this.keyboard,
+    this.hint,
+    this.isEditing = false,
+  });
+}
+
 class CafeInfoManagementPage extends StatefulWidget {
   const CafeInfoManagementPage({super.key});
 
@@ -23,19 +47,25 @@ class CafeInfoManagementPage extends StatefulWidget {
 
 class _CafeInfoManagementPageState extends State<CafeInfoManagementPage>
     with SingleTickerProviderStateMixin {
-  final _formKey   = GlobalKey<FormState>();
+  final _formKey = GlobalKey<FormState>();
+
+  // Controllers
   final _nameCtrl  = TextEditingController();
   final _descCtrl  = TextEditingController();
   final _hoursCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _addrCtrl  = TextEditingController();
 
+  // Field metadata list (urutan = urutan tampil)
+  late final List<_FieldMeta> _basicFields;
+  late final List<_FieldMeta> _contactFields;
+
   File?   _imageFile;
   String? _currentImageUrl;
 
-  bool _isLoading  = true;
-  bool _isSaving   = false;
-  bool _isDirty    = false;
+  bool _isLoading = true;
+  bool _isSaving  = false;
+  bool _isDirty   = false;
 
   late AnimationController _animCtrl;
   late Animation<double>   _fadeAnim;
@@ -43,10 +73,47 @@ class _CafeInfoManagementPageState extends State<CafeInfoManagementPage>
   @override
   void initState() {
     super.initState();
+
+    _basicFields = [
+      _FieldMeta(
+        ctrl: _nameCtrl,
+        label: 'Nama Kafe',
+        icon: Icons.storefront_rounded,
+      ),
+      _FieldMeta(
+        ctrl: _descCtrl,
+        label: 'Tentang / Deskripsi',
+        icon: Icons.description_rounded,
+        maxLines: 4,
+      ),
+    ];
+
+    _contactFields = [
+      _FieldMeta(
+        ctrl: _hoursCtrl,
+        label: 'Jam Operasional',
+        icon: Icons.access_time_filled_rounded,
+        hint: 'Contoh: Setiap Hari 08:00 – 22:00',
+      ),
+      _FieldMeta(
+        ctrl: _phoneCtrl,
+        label: 'Nomor Telepon',
+        icon: Icons.phone_android_rounded,
+        keyboard: TextInputType.phone,
+      ),
+      _FieldMeta(
+        ctrl: _addrCtrl,
+        label: 'Alamat Lengkap',
+        icon: Icons.location_on_rounded,
+        maxLines: 2,
+      ),
+    ];
+
     _animCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 450));
     _fadeAnim =
         CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
+
     _fetchCafeData();
   }
 
@@ -85,23 +152,28 @@ class _CafeInfoManagementPageState extends State<CafeInfoManagementPage>
         _phoneCtrl.text = data.cafePhone;
         _addrCtrl.text  = data.cafeAddress;
 
-        final newUrl = _buildImageUrl(data.cafeImage);
-
         setState(() {
-          _currentImageUrl = newUrl;
-          _imageFile       = null; // hapus file lokal setelah sync
+          _currentImageUrl = _buildImageUrl(data.cafeImage);
+          _imageFile       = null;
         });
       }
     } finally {
       if (mounted) {
-        setState(() { _isLoading = false; _isDirty = false; });
+        setState(() {
+          _isLoading = false;
+          _isDirty   = false;
+          // Reset semua field ke terkunci setelah fetch
+          for (final f in [..._basicFields, ..._contactFields]) {
+            f.isEditing = false;
+          }
+        });
         if (!silent) _animCtrl.forward();
       }
     }
   }
 
   // ─────────────────────────────────────────────
-  // PILIH GAMBAR
+  // GAMBAR — Tambah
   // ─────────────────────────────────────────────
   Future<void> _pickImage() async {
     final picked = await ImagePicker().pickImage(
@@ -117,15 +189,67 @@ class _CafeInfoManagementPageState extends State<CafeInfoManagementPage>
     }
   }
 
-  void _removeNewImage() => setState(() => _imageFile = null);
+  // ─────────────────────────────────────────────
+  // GAMBAR — Hapus (dengan konfirmasi)
+  // ─────────────────────────────────────────────
+  Future<void> _confirmDeleteImage() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+        title: Text('Hapus Foto Banner?',
+            style: GoogleFonts.playfairDisplay(
+                fontWeight: FontWeight.bold)),
+        content: Text(
+            'Foto banner akan dihapus. Tindakan ini tidak bisa dibatalkan setelah disimpan.',
+            style: GoogleFonts.poppins(fontSize: 13)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Batal',
+                style: GoogleFonts.poppins(
+                    color: AppColors.primaryGreen,
+                    fontWeight: FontWeight.w600)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('Hapus',
+                style: GoogleFonts.poppins(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      setState(() {
+        _imageFile       = null;
+        _currentImageUrl = null;
+        _isDirty         = true;
+      });
+    }
+  }
 
   // ─────────────────────────────────────────────
-  // SIMPAN — FIX UTAMA
-  // Setelah berhasil simpan:
-  // 1. Evict cache gambar lama supaya CachedNetworkImage
-  //    mengunduh versi baru dari server
-  // 2. Fetch ulang data dari server agar _currentImageUrl
-  //    terupdate dengan path gambar baru
+  // FIELD — aktifkan edit inline
+  // ─────────────────────────────────────────────
+  void _enableFieldEdit(_FieldMeta field) {
+    setState(() => field.isEditing = true);
+    _markDirty();
+  }
+
+  // ─────────────────────────────────────────────
+  // FIELD — hapus isi (kosongkan)
+  // ─────────────────────────────────────────────
+  void _clearField(_FieldMeta field) {
+    setState(() {
+      field.ctrl.clear();
+      field.isEditing = true; // biarkan user isi ulang langsung
+    });
+    _markDirty();
+  }
+
+  // ─────────────────────────────────────────────
+  // SIMPAN
   // ─────────────────────────────────────────────
   Future<void> _saveCafeInfo() async {
     if (!_formKey.currentState!.validate()) return;
@@ -140,20 +264,23 @@ class _CafeInfoManagementPageState extends State<CafeInfoManagementPage>
         cafeAddress:        _addrCtrl.text.trim(),
       );
 
-      final success =
-          await SettingRemoteDatasource().updateSettings(settings, _imageFile);
+      // _currentImageUrl == null && _imageFile == null
+// artinya: foto dihapus oleh user (bukan belum pernah ada)
+final bool shouldDeleteImage =
+    _currentImageUrl == null && _imageFile == null;
+ 
+final success = await SettingRemoteDatasource().updateSettings(
+  settings,
+  _imageFile,
+  deleteImage: shouldDeleteImage,
+);
 
       if (!mounted) return;
 
       if (success) {
-        // Hapus cache gambar lama — paksa unduh ulang dari server
         await _evictImageCache();
-
         _snack('Data kafe berhasil disimpan! ✓');
-
-        // Fetch ulang agar preview langsung update tanpa perlu restart
         await _fetchCafeData(silent: true);
-
         if (mounted) Navigator.pop(context, true);
       } else {
         _snack('Gagal menyimpan data. Periksa koneksi server.',
@@ -166,19 +293,18 @@ class _CafeInfoManagementPageState extends State<CafeInfoManagementPage>
     }
   }
 
-  // Hapus cache gambar lama dari CachedNetworkImage
   Future<void> _evictImageCache() async {
     try {
-      // Evict dengan cacheKey yang dipakai saat render
       await CachedNetworkImage.evictFromCache('cafe_banner_owner');
       await CachedNetworkImage.evictFromCache('cafe_banner');
-      // Jika URL lama ada, evict juga berdasarkan URL
       if (_currentImageUrl != null) {
         await CachedNetworkImage.evictFromCache(_currentImageUrl!);
       }
-    } catch (_) {
-      // Evict gagal tidak kritis — lanjutkan
-    }
+    } catch (_) {}
+  }
+
+  void _markDirty() {
+    if (!_isDirty) setState(() => _isDirty = true);
   }
 
   void _snack(String msg, {bool error = false}) {
@@ -194,7 +320,8 @@ class _CafeInfoManagementPageState extends State<CafeInfoManagementPage>
           ),
           const SizedBox(width: 10),
           Expanded(
-              child: Text(msg, style: GoogleFonts.poppins(fontSize: 13))),
+              child:
+                  Text(msg, style: GoogleFonts.poppins(fontSize: 13))),
         ],
       ),
       backgroundColor: error ? Colors.redAccent : AppColors.primaryGreen,
@@ -206,7 +333,8 @@ class _CafeInfoManagementPageState extends State<CafeInfoManagementPage>
   }
 
   Widget _circle(double s, double o) => Container(
-        width: s, height: s,
+        width: s,
+        height: s,
         decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: Colors.white.withOpacity(o)));
@@ -267,11 +395,13 @@ class _CafeInfoManagementPageState extends State<CafeInfoManagementPage>
                     SliverToBoxAdapter(child: _buildHeader()),
                     SliverToBoxAdapter(child: _buildPhotoCard()),
                     SliverToBoxAdapter(child: _buildFormCard()),
-                    const SliverToBoxAdapter(child: SizedBox(height: 110)),
+                    const SliverToBoxAdapter(
+                        child: SizedBox(height: 110)),
                   ],
                 ),
               ),
-        bottomNavigationBar: _isLoading ? null : _buildBottomAction(),
+        bottomNavigationBar:
+            _isLoading ? null : _buildBottomAction(),
       ),
     );
   }
@@ -358,8 +488,12 @@ class _CafeInfoManagementPageState extends State<CafeInfoManagementPage>
   }
 
   // ─────────────────────────────────────────────
-  // FOTO CARD
+  // FOTO CARD — Tambah / Hapus terpisah
   // ─────────────────────────────────────────────
+  bool get _hasPhoto =>
+      _imageFile != null ||
+      (_currentImageUrl != null && _currentImageUrl!.isNotEmpty);
+
   Widget _buildPhotoCard() {
     return Transform.translate(
       offset: const Offset(0, -18),
@@ -380,21 +514,23 @@ class _CafeInfoManagementPageState extends State<CafeInfoManagementPage>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Preview foto
+              // ── Preview ──
               ClipRRect(
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(20)),
+                borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(20)),
                 child: GestureDetector(
-                  onTap: _pickImage,
+                  // Tap preview = tambah foto jika kosong
+                  onTap: _hasPhoto ? null : _pickImage,
                   child: _buildPhotoPreview(),
                 ),
               ),
 
-              // Label + tombol
+              // ── Label + Tombol Aksi ──
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
                 child: Row(
                   children: [
+                    // Teks label
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -412,69 +548,27 @@ class _CafeInfoManagementPageState extends State<CafeInfoManagementPage>
                       ),
                     ),
 
-                    // Upload / Ganti
-                    GestureDetector(
-                      onTap: _pickImage,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 9),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryGreen,
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.primaryGreen
-                                  .withOpacity(0.28),
-                              blurRadius: 8,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              _hasPhoto
-                                  ? Icons.edit_rounded
-                                  : Icons.add_photo_alternate_rounded,
-                              size: 15,
-                              color: Colors.white,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              _hasPhoto ? 'Ganti' : 'Upload',
-                              style: GoogleFonts.poppins(
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white),
-                            ),
-                          ],
-                        ),
+                    // ── Tombol TAMBAH — tampil jika belum ada foto ──
+                    if (!_hasPhoto)
+                      _photoActionButton(
+                        label: 'Tambah',
+                        icon: Icons.add_photo_alternate_rounded,
+                        color: AppColors.primaryGreen,
+                        onTap: _pickImage,
                       ),
-                    ),
 
-                    // Batal pilih foto baru
-                    if (_imageFile != null) ...[
-                      const SizedBox(width: 8),
-                      GestureDetector(
-                        onTap: _removeNewImage,
-                        child: Container(
-                          padding: const EdgeInsets.all(9),
-                          decoration: BoxDecoration(
-                            color: Colors.red.withOpacity(0.09),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                                color: Colors.red.withOpacity(0.2)),
-                          ),
-                          child: const Icon(Icons.close_rounded,
-                              size: 16, color: Colors.redAccent),
-                        ),
+                    // ── Tombol HAPUS — tampil jika sudah ada foto ──
+                    if (_hasPhoto) ...[
+                      _photoActionButton(
+                        label: 'Hapus',
+                        icon: Icons.delete_rounded,
+                        color: Colors.redAccent,
+                        onTap: _confirmDeleteImage,
                       ),
                     ],
                   ],
                 ),
               ),
-              const SizedBox(height: 14),
             ],
           ),
         ),
@@ -482,14 +576,49 @@ class _CafeInfoManagementPageState extends State<CafeInfoManagementPage>
     );
   }
 
-  bool get _hasPhoto =>
-      _imageFile != null ||
-      (_currentImageUrl != null && _currentImageUrl!.isNotEmpty);
+  // Tombol aksi foto yang bisa dikonfigurasi warna & label
+  Widget _photoActionButton({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.28),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 15, color: Colors.white),
+            const SizedBox(width: 6),
+            Text(label,
+                style: GoogleFonts.poppins(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white)),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _buildPhotoPreview() {
     const double h = 210;
 
-    // Foto baru dari galeri (belum disimpan)
+    // File lokal baru (belum disimpan)
     if (_imageFile != null) {
       return Stack(
         children: [
@@ -521,24 +650,20 @@ class _CafeInfoManagementPageState extends State<CafeInfoManagementPage>
       );
     }
 
-    // Foto dari server — pakai CachedNetworkImage
-    // Setelah _evictImageCache() dipanggil saat save, gambar ini
-    // akan diunduh ulang dengan versi terbaru dari server
+    // Foto dari server
     if (_currentImageUrl != null && _currentImageUrl!.isNotEmpty) {
       return CachedNetworkImage(
         imageUrl: _currentImageUrl!,
         height: h,
         width: double.infinity,
         fit: BoxFit.cover,
-        // Gunakan URL asli sebagai cacheKey — setelah evict,
-        // cache lama tidak akan dipakai lagi
         cacheKey: _currentImageUrl,
         placeholder: (_, __) => _photoLoading(h),
-        errorWidget: (_, __, ___) => _photoEmpty(h),
+        errorWidget: (_, __, ___) => _photoEmpty(h, tapToAdd: false),
       );
     }
 
-    return _photoEmpty(h);
+    return _photoEmpty(h, tapToAdd: true);
   }
 
   Widget _photoLoading(double h) => Container(
@@ -550,7 +675,7 @@ class _CafeInfoManagementPageState extends State<CafeInfoManagementPage>
         ),
       );
 
-  Widget _photoEmpty(double h) => Container(
+  Widget _photoEmpty(double h, {bool tapToAdd = false}) => Container(
         height: h,
         color: const Color(0xFFF0EBE0),
         child: Column(
@@ -559,10 +684,14 @@ class _CafeInfoManagementPageState extends State<CafeInfoManagementPage>
             Icon(Icons.add_photo_alternate_outlined,
                 size: 46, color: Colors.brown.withOpacity(0.22)),
             const SizedBox(height: 8),
-            Text('Tap untuk upload foto kafe',
-                style: GoogleFonts.poppins(
-                    fontSize: 13,
-                    color: Colors.brown.withOpacity(0.38))),
+            Text(
+              tapToAdd
+                  ? 'Tap untuk upload foto kafe'
+                  : 'Tidak ada foto',
+              style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  color: Colors.brown.withOpacity(0.38)),
+            ),
             const SizedBox(height: 4),
             Text('Format: JPG, PNG, WEBP · Maks 4MB',
                 style: GoogleFonts.poppins(
@@ -598,28 +727,153 @@ class _CafeInfoManagementPageState extends State<CafeInfoManagementPage>
             children: [
               _sectionLabel('Informasi Dasar'),
               const SizedBox(height: 14),
-              _buildInput(ctrl: _nameCtrl, label: 'Nama Kafe',
-                  icon: Icons.storefront_rounded,
-                  onChanged: (_) => _markDirty()),
-              _buildInput(ctrl: _descCtrl, label: 'Tentang / Deskripsi',
-                  icon: Icons.description_rounded, maxLines: 4,
-                  onChanged: (_) => _markDirty()),
+              ..._basicFields.map(_buildFieldRow),
               const SizedBox(height: 8),
               _sectionLabel('Kontak & Jam Operasional'),
               const SizedBox(height: 14),
-              _buildInput(ctrl: _hoursCtrl, label: 'Jam Operasional',
-                  icon: Icons.access_time_filled_rounded,
-                  hint: 'Contoh: Setiap Hari 08:00 - 22:00',
-                  onChanged: (_) => _markDirty()),
-              _buildInput(ctrl: _phoneCtrl, label: 'Nomor Telepon',
-                  icon: Icons.phone_android_rounded,
-                  keyboard: TextInputType.phone,
-                  onChanged: (_) => _markDirty()),
-              _buildInput(ctrl: _addrCtrl, label: 'Alamat Lengkap',
-                  icon: Icons.location_on_rounded, maxLines: 2,
-                  onChanged: (_) => _markDirty()),
+              ..._contactFields.map(_buildFieldRow),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // FIELD ROW — field + tombol Edit & Hapus
+  // ─────────────────────────────────────────────
+  Widget _buildFieldRow(_FieldMeta meta) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Row(
+        crossAxisAlignment: meta.maxLines > 1
+            ? CrossAxisAlignment.start
+            : CrossAxisAlignment.center,
+        children: [
+          // ── TextFormField ──
+          Expanded(
+            child: TextFormField(
+              controller: meta.ctrl,
+              maxLines: meta.maxLines,
+              keyboardType: meta.keyboard,
+              readOnly: !meta.isEditing, // 🔒 terkunci jika belum di-edit
+              style: GoogleFonts.poppins(
+                  fontSize: 13.5,
+                  color: meta.isEditing
+                      ? const Color(0xFF1A1A1A)
+                      : Colors.grey.shade700),
+              onChanged: (_) => _markDirty(),
+              decoration: InputDecoration(
+                labelText: meta.label,
+                hintText: meta.hint,
+                hintStyle: GoogleFonts.poppins(
+                    fontSize: 12, color: Colors.grey.shade400),
+                prefixIcon: Icon(meta.icon,
+                    color: meta.isEditing
+                        ? AppColors.primaryGreen
+                        : Colors.grey.shade400,
+                    size: 21),
+                // Indikator kecil "mode edit"
+                suffixIcon: meta.isEditing
+                    ? const Icon(Icons.edit_rounded,
+                        size: 14, color: AppColors.primaryGreen)
+                    : const Icon(Icons.lock_outline_rounded,
+                        size: 14, color: Colors.grey),
+                filled: true,
+                fillColor: meta.isEditing
+                    ? const Color(0xFFF0F7F0)   // hijau muda saat edit
+                    : const Color(0xFFF8F5EF),  // krem saat terkunci
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 15),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(
+                    color: meta.isEditing
+                        ? AppColors.primaryGreen.withOpacity(0.4)
+                        : Colors.grey.shade200,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: const BorderSide(
+                      color: AppColors.primaryGreen, width: 1.5),
+                ),
+                errorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: const BorderSide(
+                      color: Colors.redAccent, width: 1),
+                ),
+                labelStyle: GoogleFonts.poppins(
+                    fontSize: 13, color: Colors.grey.shade600),
+              ),
+              validator: (v) => v!.trim().isEmpty
+                  ? 'Bidang ini tidak boleh kosong'
+                  : null,
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // ── Kolom tombol Edit & Hapus ──
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Tombol Edit
+              _fieldIconButton(
+                icon: Icons.edit_rounded,
+                color: meta.isEditing
+                    ? AppColors.primaryGreen
+                    : Colors.grey.shade400,
+                bgColor: meta.isEditing
+                    ? AppColors.primaryGreen.withOpacity(0.12)
+                    : Colors.grey.shade100,
+                tooltip: meta.isEditing ? 'Sedang diedit' : 'Edit field ini',
+                onTap: meta.isEditing
+                    ? null  // sudah aktif, tidak perlu tap lagi
+                    : () => _enableFieldEdit(meta),
+              ),
+
+              const SizedBox(height: 6),
+
+              // Tombol Hapus
+              _fieldIconButton(
+                icon: Icons.delete_rounded,
+                color: Colors.redAccent,
+                bgColor: Colors.red.withOpacity(0.08),
+                tooltip: 'Kosongkan field ini',
+                onTap: () => _clearField(meta),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Tombol ikon kecil untuk aksi per field
+  Widget _fieldIconButton({
+    required IconData icon,
+    required Color color,
+    required Color bgColor,
+    required String tooltip,
+    VoidCallback? onTap,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, size: 17, color: color),
         ),
       ),
     );
@@ -641,65 +895,6 @@ class _CafeInfoManagementPageState extends State<CafeInfoManagementPage>
                 fontWeight: FontWeight.bold,
                 color: const Color(0xFF1A1A1A))),
       ],
-    );
-  }
-
-  void _markDirty() {
-    if (!_isDirty) setState(() => _isDirty = true);
-  }
-
-  Widget _buildInput({
-    required TextEditingController ctrl,
-    required String label,
-    required IconData icon,
-    int maxLines = 1,
-    TextInputType? keyboard,
-    String? hint,
-    void Function(String)? onChanged,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: TextFormField(
-        controller: ctrl,
-        maxLines: maxLines,
-        keyboardType: keyboard,
-        style: GoogleFonts.poppins(
-            fontSize: 13.5, color: const Color(0xFF1A1A1A)),
-        onChanged: onChanged,
-        decoration: InputDecoration(
-          labelText: label,
-          hintText: hint,
-          hintStyle: GoogleFonts.poppins(
-              fontSize: 12, color: Colors.grey.shade400),
-          prefixIcon:
-              Icon(icon, color: AppColors.primaryGreen, size: 21),
-          filled: true,
-          fillColor: const Color(0xFFF8F5EF),
-          contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16, vertical: 15),
-          border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide.none),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: Colors.grey.shade200),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(
-                color: AppColors.primaryGreen, width: 1.5),
-          ),
-          errorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide:
-                const BorderSide(color: Colors.redAccent, width: 1),
-          ),
-          labelStyle: GoogleFonts.poppins(
-              fontSize: 13, color: Colors.grey.shade600),
-        ),
-        validator: (v) =>
-            v!.trim().isEmpty ? 'Bidang ini tidak boleh kosong' : null,
-      ),
     );
   }
 

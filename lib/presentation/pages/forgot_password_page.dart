@@ -22,17 +22,54 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   bool _isLoading = false;
 
   void _handleRequestOtp() async {
-    setState(() => _isLoading = true);
-    final success = await AuthRemoteDatasource().forgotPassword(_emailController.text);
-    setState(() => _isLoading = false);
-
-    if (success) {
-      setState(() => _otpSent = true);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("OTP terkirim ke email!")));
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Email tidak ditemukan")));
-    }
+  if (_emailController.text.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Email harus diisi!"),
+        backgroundColor: Colors.red,
+      ),
+    );
+    return;
   }
+
+  setState(() => _isLoading = true);
+
+  final result = await AuthRemoteDatasource().forgotPassword(_emailController.text);
+
+  setState(() => _isLoading = false);
+
+  if (!mounted) return;
+
+  if (result['success'] == true) {
+    setState(() => _otpSent = true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("OTP terkirim ke email!")),
+    );
+  } else {
+    // Tampilkan pesan error dari server (termasuk pesan microservice mati)
+    final message = result['message'] ?? 'Gagal mengirim OTP. Coba lagi.';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text("Gagal"),
+          ],
+        ),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("OK"),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
   void _handleReset() async {
     setState(() => _isLoading = true);

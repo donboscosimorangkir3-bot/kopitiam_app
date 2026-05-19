@@ -172,7 +172,7 @@ class _SalesReportPageState extends State<SalesReportPage>
   }
 
   // =================================================================
-  // EKSPOR EXCEL — menggunakan package excel
+  // EKSPOR EXCEL
   // =================================================================
   Future<void> _exportReport() async {
     if (_isExporting) return;
@@ -180,7 +180,6 @@ class _SalesReportPageState extends State<SalesReportPage>
     _showSnackBar("Menyiapkan ekspor laporan Excel...",
         icon: Icons.hourglass_top_rounded);
 
-    // ── Cek izin penyimpanan ──
     bool permissionGranted = false;
     if (Platform.isAndroid) {
       final androidInfo = await DeviceInfoPlugin().androidInfo;
@@ -211,21 +210,21 @@ class _SalesReportPageState extends State<SalesReportPage>
     }
 
     try {
-      // ── Buat file Excel ──
       final excel = Excel.createExcel();
 
-      // Hapus sheet default "Sheet1" yang dibuat otomatis
-      excel.delete('Sheet1');
-
-      // ── SHEET 1: Ringkasan ──
+      // ── FIX SHEET1: Buat sheet yang dibutuhkan DULU,
+      //   baru hapus Sheet1 agar package tidak error ──
       final summarySheet = excel['Ringkasan'];
       _buildSummarySheet(summarySheet);
 
-      // ── SHEET 2: Detail Transaksi ──
       final detailSheet = excel['Detail Transaksi'];
       _buildDetailSheet(detailSheet);
 
-      // ── Simpan file ──
+      // Hapus Sheet1 setelah sheet lain sudah ada
+      if (excel.sheets.containsKey('Sheet1')) {
+        excel.delete('Sheet1');
+      }
+
       final startStr = DateFormat('yyyy-MM-dd').format(_selectedStartDate);
       final endStr = DateFormat('yyyy-MM-dd').format(_selectedEndDate);
       final fileName = 'laporan_penjualan_${startStr}_$endStr.xlsx';
@@ -250,7 +249,7 @@ class _SalesReportPageState extends State<SalesReportPage>
     }
   }
 
-  // ── Helper: Style sel header tabel ──
+  // ── Style helpers ──
   CellStyle _headerStyle() => CellStyle(
         bold: true,
         backgroundColorHex: ExcelColor.fromHexString('#2D6A4F'),
@@ -260,84 +259,80 @@ class _SalesReportPageState extends State<SalesReportPage>
         textWrapping: TextWrapping.WrapText,
       );
 
-  // ── Helper: Style sel judul section ──
   CellStyle _titleStyle() => CellStyle(
         bold: true,
         fontSize: 14,
         fontColorHex: ExcelColor.fromHexString('#1B4332'),
       );
 
-  // ── Helper: Style sel label ringkasan ──
   CellStyle _labelStyle() => CellStyle(
         bold: true,
         fontColorHex: ExcelColor.fromHexString('#374151'),
         backgroundColorHex: ExcelColor.fromHexString('#F0FDF4'),
       );
 
-  // ── Helper: Style zebra row (baris genap) ──
   CellStyle _zebraStyle() => CellStyle(
         backgroundColorHex: ExcelColor.fromHexString('#F9FAFB'),
       );
 
-  // ── Helper: Isi sel dengan teks dan style opsional ──
+  // ── FIX UTAMA: _setCell membedakan int dan double ──────────────
+  // int  → IntCellValue  : tampil "1", "3", "18" tanpa desimal
+  // double → DoubleCellValue : tampil nilai asli (untuk Rp)
+  // String → TextCellValue
   void _setCell(Sheet sheet, int row, int col, dynamic value,
       {CellStyle? style}) {
-    final cell = sheet.cell(CellIndex.indexByColumnRow(
-        columnIndex: col, rowIndex: row));
-    if (value is double || value is int) {
-      cell.value = DoubleCellValue(value.toDouble());
+    final cell = sheet.cell(
+        CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row));
+
+    if (value is int) {
+      cell.value = IntCellValue(value);
+    } else if (value is double) {
+      cell.value = DoubleCellValue(value);
     } else {
       cell.value = TextCellValue(value.toString());
     }
+
     if (style != null) cell.cellStyle = style;
   }
 
   // ── Sheet Ringkasan ──
   void _buildSummarySheet(Sheet sheet) {
-    // Judul
     _setCell(sheet, 0, 0, 'LAPORAN PENJUALAN KOPITIAM33',
         style: _titleStyle());
-    _setCell(sheet, 1, 0, 'Periode',
-        style: CellStyle(bold: true));
+    _setCell(sheet, 1, 0, 'Periode', style: CellStyle(bold: true));
     _setCell(sheet, 1, 1,
         '${_formatDateShort(_selectedStartDate)} - ${_formatDateShort(_selectedEndDate)}');
-    _setCell(sheet, 2, 0, 'Digenerate',
-        style: CellStyle(bold: true));
+    _setCell(sheet, 2, 0, 'Digenerate', style: CellStyle(bold: true));
     _setCell(sheet, 2, 1,
         DateFormat('dd MMM yyyy, HH:mm').format(DateTime.now()));
 
-    // Spasi
     _setCell(sheet, 3, 0, '');
 
-    // Header ringkasan
     _setCell(sheet, 4, 0, 'Metrik', style: _headerStyle());
     _setCell(sheet, 4, 1, 'Nilai', style: _headerStyle());
 
-    // Data ringkasan
-    final summaryData = [
-      ['Total Pendapatan (Rp)', _totalRevenue],
-      ['Total Pesanan', _orders.length],
-      ['Pesanan Selesai', _completedCount],
-      ['Pesanan Dibatalkan', _cancelledCount],
-      ['Rata-rata Per Pesanan (Rp)', _avgOrderValue],
+    // FIX: tipe data eksplisit — int untuk hitungan, double untuk rupiah
+    final summaryData = <List<dynamic>>[
+      ['Total Pendapatan (Rp)',      _totalRevenue],       // double
+      ['Total Pesanan',              _orders.length],      // int → tidak ada ".00"
+      ['Pesanan Selesai',            _completedCount],     // int → tidak ada ".00"
+      ['Pesanan Dibatalkan',         _cancelledCount],     // int → tidak ada ".00"
+      ['Rata-rata Per Pesanan (Rp)', _avgOrderValue],      // double
     ];
 
     for (var i = 0; i < summaryData.length; i++) {
       final isZebra = i % 2 == 1;
-      _setCell(sheet, 5 + i, 0, summaryData[i][0],
-          style: _labelStyle());
+      _setCell(sheet, 5 + i, 0, summaryData[i][0], style: _labelStyle());
       _setCell(sheet, 5 + i, 1, summaryData[i][1],
           style: isZebra ? _zebraStyle() : null);
     }
 
-    // Lebar kolom
     sheet.setColumnWidth(0, 30);
     sheet.setColumnWidth(1, 25);
   }
 
   // ── Sheet Detail Transaksi ──
   void _buildDetailSheet(Sheet sheet) {
-    // Header kolom
     final headers = [
       'No', 'ID Pesanan', 'Nomor Pesanan', 'Pelanggan', 'Email',
       'Tipe', 'Meja', 'Total (Rp)', 'Status', 'Metode Bayar',
@@ -348,7 +343,6 @@ class _SalesReportPageState extends State<SalesReportPage>
       _setCell(sheet, 0, col, headers[col], style: _headerStyle());
     }
 
-    // Data baris
     for (var i = 0; i < _orders.length; i++) {
       final order = _orders[i];
       final itemsDetail = order.items
@@ -358,15 +352,16 @@ class _SalesReportPageState extends State<SalesReportPage>
       final isZebra = i % 2 == 1;
       final zebraStyle = isZebra ? _zebraStyle() : null;
 
-      final rowData = [
-        i + 1,
-        order.id,
+      // FIX: No (i+1) dan order.id adalah int → IntCellValue → tanpa desimal
+      final rowData = <dynamic>[
+        i + 1,               // int: No urut
+        order.id,            // int: ID Pesanan (pastikan tipe int di model)
         order.orderNumber,
         order.user?.name ?? 'N/A',
         order.user?.email ?? 'N/A',
         order.orderType ?? '-',
         order.tableNumber?.toString() ?? '-',
-        order.totalAmount,
+        order.totalAmount,   // double: nilai rupiah
         _getStatusLabel(order.status),
         order.paymentMethod ?? 'N/A',
         DateFormat('dd/MM/yyyy HH:mm').format(order.createdAt),
@@ -378,7 +373,7 @@ class _SalesReportPageState extends State<SalesReportPage>
       }
     }
 
-    // Baris total di paling bawah
+    // Baris total
     if (_orders.isNotEmpty) {
       final totalRow = _orders.length + 1;
       _setCell(sheet, totalRow, 6, 'TOTAL',
@@ -395,19 +390,18 @@ class _SalesReportPageState extends State<SalesReportPage>
           ));
     }
 
-    // Lebar kolom
-    sheet.setColumnWidth(0, 5);   // No
-    sheet.setColumnWidth(1, 10);  // ID
-    sheet.setColumnWidth(2, 20);  // Nomor Pesanan
-    sheet.setColumnWidth(3, 20);  // Pelanggan
-    sheet.setColumnWidth(4, 28);  // Email
-    sheet.setColumnWidth(5, 12);  // Tipe
-    sheet.setColumnWidth(6, 8);   // Meja
-    sheet.setColumnWidth(7, 18);  // Total
-    sheet.setColumnWidth(8, 14);  // Status
-    sheet.setColumnWidth(9, 16);  // Metode
-    sheet.setColumnWidth(10, 20); // Tanggal
-    sheet.setColumnWidth(11, 40); // Item
+    sheet.setColumnWidth(0, 5);
+    sheet.setColumnWidth(1, 10);
+    sheet.setColumnWidth(2, 20);
+    sheet.setColumnWidth(3, 20);
+    sheet.setColumnWidth(4, 28);
+    sheet.setColumnWidth(5, 12);
+    sheet.setColumnWidth(6, 8);
+    sheet.setColumnWidth(7, 18);
+    sheet.setColumnWidth(8, 14);
+    sheet.setColumnWidth(9, 16);
+    sheet.setColumnWidth(10, 20);
+    sheet.setColumnWidth(11, 40);
   }
 
   // =================================================================
@@ -530,7 +524,9 @@ class _SalesReportPageState extends State<SalesReportPage>
                   "File Excel (.xlsx) berhasil dibuat dengan 2 sheet:\nRingkasan & Detail Transaksi.",
                   textAlign: TextAlign.center,
                   style: GoogleFonts.poppins(
-                      fontSize: 12.5, color: Colors.grey.shade600, height: 1.5)),
+                      fontSize: 12.5,
+                      color: Colors.grey.shade600,
+                      height: 1.5)),
               const SizedBox(height: 10),
               Container(
                 padding:
@@ -1264,9 +1260,6 @@ class _SalesReportPageState extends State<SalesReportPage>
     );
   }
 
-  // ─────────────────────────────────────────────────
-  // HEADER
-  // ─────────────────────────────────────────────────
   Widget _buildHeader() {
     return Container(
       decoration: BoxDecoration(
@@ -1310,21 +1303,15 @@ class _SalesReportPageState extends State<SalesReportPage>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          "Laporan Penjualan",
-                          style: GoogleFonts.playfairDisplay(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                            fontSize: 20,
-                          ),
-                        ),
-                        Text(
-                          "Pantau omset & performa toko",
-                          style: GoogleFonts.poppins(
-                            fontSize: 11,
-                            color: Colors.white.withOpacity(0.72),
-                          ),
-                        ),
+                        Text("Laporan Penjualan",
+                            style: GoogleFonts.playfairDisplay(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                fontSize: 20)),
+                        Text("Pantau omset & performa toko",
+                            style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                color: Colors.white.withOpacity(0.72))),
                       ],
                     ),
                   ),
@@ -1381,17 +1368,13 @@ class _SalesReportPageState extends State<SalesReportPage>
         ),
       );
 
-  // ─────────────────────────────────────────────────
-  // DATE FILTER
-  // ─────────────────────────────────────────────────
   Widget _buildDateFilterCard() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: GestureDetector(
         onTap: _selectDateRange,
         child: Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
@@ -1420,15 +1403,13 @@ class _SalesReportPageState extends State<SalesReportPage>
                   children: [
                     Text("Periode Laporan",
                         style: GoogleFonts.poppins(
-                            fontSize: 10.5,
-                            color: Colors.grey.shade500)),
+                            fontSize: 10.5, color: Colors.grey.shade500)),
                     Text(
                       "${_formatDateShort(_selectedStartDate)}  –  ${_formatDateShort(_selectedEndDate)}",
                       style: GoogleFonts.poppins(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF1A1A1A),
-                      ),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF1A1A1A)),
                     ),
                   ],
                 ),
@@ -1453,9 +1434,6 @@ class _SalesReportPageState extends State<SalesReportPage>
     );
   }
 
-  // ─────────────────────────────────────────────────
-  // SUMMARY SECTION
-  // ─────────────────────────────────────────────────
   Widget _buildSummarySection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1502,13 +1480,11 @@ class _SalesReportPageState extends State<SalesReportPage>
                         style: GoogleFonts.poppins(
                             fontSize: 11.5,
                             color: Colors.white.withOpacity(0.8))),
-                    Text(
-                      _formatPrice(_totalRevenue),
-                      style: GoogleFonts.playfairDisplay(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white),
-                    ),
+                    Text(_formatPrice(_totalRevenue),
+                        style: GoogleFonts.playfairDisplay(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white)),
                   ],
                 ),
               ),
@@ -1529,9 +1505,7 @@ class _SalesReportPageState extends State<SalesReportPage>
             ],
           ),
         ),
-
         const SizedBox(height: 12),
-
         GridView.count(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -1601,9 +1575,6 @@ class _SalesReportPageState extends State<SalesReportPage>
     );
   }
 
-  // ─────────────────────────────────────────────────
-  // LIST HEADER
-  // ─────────────────────────────────────────────────
   Widget _buildListHeader() {
     return Row(
       children: [
@@ -1629,9 +1600,6 @@ class _SalesReportPageState extends State<SalesReportPage>
     );
   }
 
-  // ─────────────────────────────────────────────────
-  // ORDER CARD
-  // ─────────────────────────────────────────────────
   Widget _buildOrderCard(Order order) {
     final statusColor = _getStatusColor(order.status);
     final statusIcon = _getStatusIcon(order.status);
@@ -1708,11 +1676,9 @@ class _SalesReportPageState extends State<SalesReportPage>
                 ),
               ],
             ),
-
             const SizedBox(height: 10),
             Divider(height: 1, color: Colors.grey.shade100),
             const SizedBox(height: 8),
-
             Row(
               children: [
                 Icon(Icons.schedule_rounded,
@@ -1723,9 +1689,7 @@ class _SalesReportPageState extends State<SalesReportPage>
                         fontSize: 11.5, color: Colors.grey.shade500)),
               ],
             ),
-
             const SizedBox(height: 8),
-
             if (order.items != null && order.items!.isNotEmpty)
               ...order.items!.map((item) => Padding(
                     padding: const EdgeInsets.only(bottom: 4),
@@ -1736,7 +1700,8 @@ class _SalesReportPageState extends State<SalesReportPage>
                           height: 20,
                           margin: const EdgeInsets.only(right: 7),
                           decoration: BoxDecoration(
-                            color: AppColors.primaryGreen.withOpacity(0.1),
+                            color:
+                                AppColors.primaryGreen.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(5),
                           ),
                           child: Center(
@@ -1772,9 +1737,6 @@ class _SalesReportPageState extends State<SalesReportPage>
     );
   }
 
-  // ─────────────────────────────────────────────────
-  // EMPTY & ERROR
-  // ─────────────────────────────────────────────────
   Widget _buildEmptyState() {
     return Center(
       child: Padding(
